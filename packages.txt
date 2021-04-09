@@ -1,1 +1,1 @@
-pymupdf
+python3-fitz_1.18.10
