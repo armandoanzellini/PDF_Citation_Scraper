@@ -1,1 +1,1 @@
-python3-fitz_1.18.10
+PyMuPDF-1.18.10-cp37-cp37m-win_amd64
