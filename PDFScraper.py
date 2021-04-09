@@ -16,7 +16,6 @@ We'll have search terms as well to search and how they change over time to be
 able to really follow it back
 
 """
-import os
 import fitz
 import itertools
 import streamlit as st
@@ -29,20 +28,6 @@ year = st.number_input('Year of citation: ', value = 1950, step = 1)
 
 # Ask user to upload a file
 uploaded_file = st.file_uploader("Choose a PDF...", type="pdf")
-
-#direct = 'C:\\Users\\Armando\\OneDrive\\Documents\\Python Scripts\\ForensicScienceTree\\' 
-
-#fname  = 'Garvin et al 2014 Dimorphism cranial trait scores.pdf'
-
-
-#authors = 'Walker'
-
-#year    = '2008'
-
-#citations = (authors + ', ' + year, authors + ' (%s)' % year)
-
-
-#os.chdir(direct)
 
 # Define the class and associated functions
 class pdf_scraper(object):
