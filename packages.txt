@@ -1,1 +1,1 @@
-PyMuPDF-1.18.10-cp37-cp37
+PyMuPDF-1.18.10
