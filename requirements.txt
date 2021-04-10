@@ -1,2 +1,2 @@
 streamlit==0.79.0
-fitz==0.0.1.dev2
+PyMuPDF==1.18.10
