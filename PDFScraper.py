@@ -43,7 +43,6 @@ class pdf_scraper(object):
             text = []
             for page in doc:
                 text += [[page.number + 1, page.get_text("blocks")]]
-            doc.close()
                 
         # Remove unneccessary tuple values from paragraph and clean up for readability
         paras = []
