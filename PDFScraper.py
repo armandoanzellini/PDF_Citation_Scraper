@@ -29,10 +29,6 @@ year = st.number_input('Year of citation: ', value = 1950, step = 1)
 # Ask user to upload a file
 uploaded_file = st.file_uploader("Choose a PDF...", type="pdf")
 
-fname = 'C:\\Users\\Armando\\Desktop\\Garvin et al 2014 Dimorphism cranial trait scores.pdf'
-
-f = open(fname, "rb")
-
 # Define the class and associated functions
 class pdf_scraper(object):
     def __init__(self, file, authors, year):
