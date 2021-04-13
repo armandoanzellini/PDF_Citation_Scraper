@@ -17,7 +17,6 @@ able to really follow it back
 
 """
 import fitz
-from io import BytesIO
 import streamlit as st
 
 
@@ -40,7 +39,7 @@ class pdf_scraper(object):
         citations = self.citations # redefine for ease of function
         
         # Open the pdf as text per page and per paragraph (return [page, paragraph])
-        with fitz.open(stream=self.file, filetype="pdf") as doc: # opening BytesIO stream
+        with fitz.open(None, self.file, "pdf") as doc: # opening BytesIO stream
             text = []
             for page in doc:
                 text += [[page.number + 1, page.get_text("blocks")]]
