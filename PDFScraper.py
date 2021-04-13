@@ -28,6 +28,10 @@ year = st.number_input('Year of citation: ', value = 1950, step = 1)
 # Ask user to upload a file
 uploaded_file = st.file_uploader("Choose a PDF...", type="pdf")
 
+fname = 'C:\\Users\\Armando\\Desktop\\Garvin et al 2014 Dimorphism cranial trait scores.pdf'
+
+f = open(fname, "rb")
+
 # Define the class and associated functions
 class pdf_scraper(object):
     def __init__(self, file, authors, year):
@@ -78,11 +82,12 @@ class pdf_scraper(object):
         
         # Make sure paragraphs are not orphaned by finding the continuation on next pg
         for i in match:
-            if i[1][-2] != '.':
-                ix = paras.index(i)
-                i[1] += paras[ix + 1][1]  # only returns start page of paragraph
+            ix = paras.index(i)
+            while i[1][-2] != '.':
+                i[1] += paras[ix + 1][1]  # only returns start page of match
+                ix += 1
         
-        # Make sure paragrpahs start correctly not in the middle of a sentence
+        # Make sure paragraphs start correctly not in the middle of a sentence
         for i in match:
             if not i[1][0].isupper():
                 ix = paras.index(i)
