@@ -18,6 +18,7 @@ able to really follow it back
 """
 import fitz
 import streamlit as st
+from copy import deepcopy
 
 
 st.title('PDF Citation Scraper')
@@ -76,54 +77,23 @@ class pdf_scraper(object):
             if numcount > letcount:
                 paras.remove(i)
         
-        # Find all paragraphs where citation is found and return paragraph and page in list
-        match  = [s for s in paras if citations[0] in s[1]]
-        match += [s for s in paras if citations[1] in s[1]]
+        # Find all paragraphs where citation is found and return paragraph and page in list  
+        match  = [s for s in deepcopy(paras) if citations[0] in s[1]]
+        match += [s for s in deepcopy(paras) if citations[1] in s[1]]
         
-        # Make sure paragraphs are not orphaned by finding the continuation on next pg
+        # Make sure paragraphs are not orphaned finding the continuation on next pg
+        # And make sure paragraphs start correctly not in the middle of a sentence
         for i in match:
             ix = paras.index(i)
             while i[1][-2] != '.':
                 i[1] += paras[ix + 1][1]  # only returns start page of match
                 ix += 1
-        
-        # Make sure paragraphs start correctly not in the middle of a sentence
-        for i in match:
-            if not i[1][0].isupper():
-                ix = paras.index(i)
+            while i[1][0].isupper() == False:
                 i[1] = paras[ix - 1][1] + i[1]
-                
+                ix -= 1
+
         # Sort matches by page number prior to finding sentences
         match = sorted(match, key=lambda x: x[0])
-            
-        # Get sentences in which the match occurred for citations
-        # Create function to simplify implementation of this finding
-        def find_sentence(string, sub):
-            sub_start = string.find(sub)
-            start = 0
-            end   = 0
-            for i in range(sub_start, len(string)):
-                if string[i:i + 2] == '. ':
-                    end = i + 1
-                    break
-            for i in range(sub_start, 0, -1):
-                if string[i:i + 2] == '. ':
-                    start = i + 2
-                    break
-            return start, end
-        
-        # implement function to find the sentences related to citation[0]
-        sentences = []
-        for i in match:
-            sent_loc = find_sentence(i[1], citations[0])
-            sent = i[1][sent_loc[0]:sent_loc[1]]
-            sentences += [sent]
-            
-        # do the same as above implementing function to find citation[1]
-        for i in match:
-            sent_loc = find_sentence(i[1], citations[1])
-            sent = i[1][sent_loc[0]:sent_loc[1]]
-            sentences += [sent]
         
         # define function that finds the index of a duplicated value in a list
         def duplicates(lst, item):
@@ -148,6 +118,22 @@ class pdf_scraper(object):
         # Now use collected indices to remove the duplicated values from match
         for i in sorted(list(dup_ix), reverse=True):    # reversed to avoid changing indices
             match.pop(i)
+            
+        # Get sentences in which the match occurred for citations
+        # Get sentences related to citation[0]
+        sentences = []
+        for i in match:
+            temp_i = deepcopy(i[1].split('. '))
+            for s in temp_i:
+                if s.find(citations[0]) != -1:
+                    sentences += [s]
+                            
+        # do the same as above implementing function to find citation[1]
+        for i in match:
+            temp_i = deepcopy(i[1].split('. '))
+            for s in temp_i:
+                if s.find(citations[1]) != -1:
+                    sentences += [s]
             
         sentences = list(set(sentences))
         
