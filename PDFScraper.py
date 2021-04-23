@@ -15,6 +15,12 @@ Use keywords as well from API search
 We'll have search terms as well to search and how they change over time to be
 able to really follow it back
 
+
+Add number citations search too since major in Forensic Science International
+
+Only really good for what we're hoping to do in presenting our data, not in
+research necessarily
+
 """
 import fitz
 import streamlit as st
