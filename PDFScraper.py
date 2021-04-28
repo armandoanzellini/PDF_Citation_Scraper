@@ -183,9 +183,10 @@ class pdf_scraper(object):
 hover_text = 'Click Run to start the scraping'
 
 # Run the program if all criteria are met
-if None not in {authors, year} and not uploaded_files and st.button('Run', help=hover_text):
-    for uploaded_file in uploaded_files: 
-        pdf_scraper(uploaded_file, authors, year).return_match()
+if None not in {authors, year} and not uploaded_files:
+    if st.button('Run', help=hover_text):
+        for uploaded_file in uploaded_files: 
+            pdf_scraper(uploaded_file, authors, year).return_match()
 '''    
 def create_download_link(val, filename):
     b64 = base64.b64encode(val)  # val looks like b'...'
