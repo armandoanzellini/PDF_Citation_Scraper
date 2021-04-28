@@ -24,6 +24,7 @@ research necessarily
 """
 import fitz
 import streamlit as st
+import base64
 from copy import deepcopy
 
 
@@ -33,7 +34,7 @@ authors = st.text_input('Last names as shown in citation (e.g., Walker and Bass 
 year = st.number_input('Year of citation: ', value = 1950, step = 1)
 
 # Ask user to upload a file
-uploaded_file = st.file_uploader("Choose a PDF...", type="pdf")
+uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
 # Define the class and associated functions
 class pdf_scraper(object):
@@ -182,6 +183,21 @@ class pdf_scraper(object):
 hover_text = 'Click Run to start the scraping'
 
 # Run the program if all criteria are met
-if None not in {uploaded_file, authors, year} and st.button('Run', help=hover_text):  
-    pdf_scraper(uploaded_file, authors, year).return_match()
+if None not in {uploaded_files, authors, year} and st.button('Run', help=hover_text):
+    for uploaded_file in uploaded_files: 
+        pdf_scraper(uploaded_file, authors, year).return_match()
+'''    
+def create_download_link(val, filename):
+    b64 = base64.b64encode(val)  # val looks like b'...'
+    return f'<a href="data:application/octet-stream;base64,{b64.decode()}" download="{filename}.pdf">Download file</a>'
+
+if export_as_pdf:
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(40, 10, report_text)
     
+    html = create_download_link(pdf.output(dest="S").encode("latin-1"), "test")
+
+    st.markdown(html, unsafe_allow_html=True)
+'''
