@@ -183,7 +183,7 @@ class pdf_scraper(object):
 hover_text = 'Click Run to start the scraping'
 
 # Run the program if all criteria are met
-if None not in {uploaded_files, authors, year} and st.button('Run', help=hover_text):
+if None not in {authors, year} and not uploaded_files and st.button('Run', help=hover_text):
     for uploaded_file in uploaded_files: 
         pdf_scraper(uploaded_file, authors, year).return_match()
 '''    
