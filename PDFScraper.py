@@ -18,7 +18,7 @@ from copy import deepcopy
 
 st.title('PDF Citation Scraper')
 # Get authors and years to look for
-refs  = st.text_input('Last names and years separated by comas with a semicolon denoting a new reference (e.g., Walker, 2005; Saini et al., 2012): ')
+refs  = st.text_input('Last names and years separated by comas with a semicolon denoting a new reference (e.g., Walker, 2005; Saini, Srivastava, Rai, Shamal, Singh, and Tripathi, 2012): ')
 keywords = st.text_input('Keywords separated by a comma: ')
 simult   = st.checkbox('Check box if keywords and authors should be searched in the same sentence.')
 
@@ -26,14 +26,16 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
 # direct = 'C:\\Users\\Armando\\Desktop\\'
+
 # file = open(direct + 'Pringle-2012-Establishing forensic search meth.pdf', 'rb')
 # file = open(direct + 'Grosman et al 2008 Sahman burial from Levant.pdf', 'rb')
 # file = open(direct + 'Garvin et al 2014 Dimorphism cranial trait scores.pdf', 'rb')
-# refs = 'Saini, Srivastava, Rai, Shamal, Singh, and Tripathi, 2012; Walker, 2005; Van Gerven, Sheridan, and Adams, 1995'
+
+# refs = 'Saini, Srivastava, Rai, Shamal, Singh, and Tripathi, 2012; Walker, 2008'
 # refs = 'Witten, Brooks, Fenner, 2000; Schultz, 2008'
 # refs = 'Schultz, 2008'
 # refs = 'Walker, 2008'
-# keywords = 'clandestine'
+# keywords = 'sexual dimorphism'
 
 # Define the class and associated functions
 class pdf_scraper(object):
@@ -237,12 +239,14 @@ class pdf_scraper(object):
                 references_fixed += [references[ix]]
         
           
-            """
-            this one still shows up as separated in references, how to fix?
-            Year has to be in the same line as authors!!!
-            '[17] B.B. Ellwood, D.W. Owsley, S.H. Ellwood, P.A. Mercado-Allinger, Search for the grave of the hanged Texas gunfighter, William Preston Longley, Hist. Arch. 28',
-            '(1994) 94–112.',
-             """
+        """
+        this one still shows up as separated in references, how to fix?
+        Year has to be in the same line as authors!!!
+        '[17] B.B. Ellwood, D.W. Owsley, S.H. Ellwood, P.A. Mercado-Allinger, Search for the grave of the hanged Texas gunfighter, William Preston Longley, Hist. Arch. 28',
+        '(1994) 94–112.',
+            
+        Also need to fix non-numbered references to add Extract_References button later
+        """
              
         # Separate the reading portion from the finding matches portion in order to create a "find keyword" function
         
@@ -294,17 +298,20 @@ class pdf_scraper(object):
         self.range_cite = range_cite                
         self.cite_nums = cite_nums
         
-        # Checking if the numbered refs return anything and then creating citations
-        # based on that. Use function for in-text citations
-        '''
-        if not cite_nums:
-            citations = []
-            for authors, year in self.intext_refs:
-                citations += [authors + ', ' + str(year), 
-                              authors + ' (%s)' % str(year),
-                              authors + ' ' + str(year)]
-        '''
         """
+        # Make sure paragraphs are not orphaned
+        orphan = []
+        for ix in reversed(range(1, len(paras))):
+            text = ''
+            j = ix
+            while paras[j][1][0].islower():
+                text = paras[ix-1][1] + paras[ix][1] + text
+                j -= 1
+                print(text)
+            orphan = [[paras[j][0], text]] + orphan
+            
+    
+
         orphan = []
         for ix in range(3, len(paras)):
             page = paras[ix][0]
@@ -339,12 +346,9 @@ class pdf_scraper(object):
     
         """
         
-        #self.paras = paras
-        #self.citations = citations
-        
         return paras
             
-    def find_citations(self, paras, reflist):
+    def find_citations(self, paras):
         
         # defining regex function to find sentences with in-text citations
         def intext_match(paragraph, ref):
@@ -382,7 +386,7 @@ class pdf_scraper(object):
         # Get sentences in which the match occurred for in-text citations   
         if not self.cite_nums:
             sentences = []
-            for ref in reflist:
+            for ref in self.intext_refs:
                 for paragraph in paras:
                     sentences += intext_match(paragraph, ref)
         
@@ -403,7 +407,7 @@ class pdf_scraper(object):
 
         return ref_sentences
     
-    def find_keywords(self, paras, keywords):
+    def find_keywords(self, paras):
         
         def keyword_match(paragraph, word):
             sentences = []
@@ -417,7 +421,7 @@ class pdf_scraper(object):
         # Get sentences in which the match occurred for keywords
         # Get sentences related to all keywords     
         sentences = []
-        for word in keywords:
+        for word in self.keywords:
             for paragraph in paras:
                 sentences += keyword_match(paragraph, word)
         
@@ -432,12 +436,12 @@ class pdf_scraper(object):
 
         # check if either refs or keywords are empty
         if not self.empty_ref:
-            ref_sentences = self.find_citations(paras, self.reflist)
+            ref_sentences = self.find_citations(paras)
         else:
             ref_sentences = []
 
         if not self.empty_kw:
-            kw_sentences = self.find_keywords(paras, self.keywords)
+            kw_sentences = self.find_keywords(paras)
         else:
             kw_sentences = []
         
@@ -462,7 +466,8 @@ class pdf_scraper(object):
     
         match, sentences = self.find_match(together)
         
-        st.title(self.file.name + ' Finding: ' + str(self.refs))
+        st.title(self.file.name.strip('.pdf'))
+        st.title('Finding: ' + str(self.refs))
         
         # Add note to 
         if self.cite_nums:
