@@ -35,6 +35,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 # refs = 'Witten, Brooks, Fenner, 2000; Schultz, 2008'
 # refs = 'Schultz, 2008'
 # refs = 'Walker, 2008'
+# refs = 'ROCHE, WAINER, THISSEN, 1974'
 # keywords = 'sexual dimorphism'
 
 # Define the class and associated functions
@@ -46,6 +47,9 @@ class pdf_scraper(object):
         # take references as input and parse
         refs = refs.replace(' and ', ', ') # remove 'and's at the beginning to make parsing easier
         refs = refs.replace(',,', ',') # remove double commas coming from above
+        
+        # ensure references are in title case, with every word capitalized
+        refs = refs.title()
         
         # check if value has been given before turning into list
         if not refs:
@@ -187,6 +191,13 @@ class pdf_scraper(object):
             letcount = sum(c.isalpha() for c in i[1])
             if numcount > letcount:
                 paras.remove(i)
+                
+        # Do twice just in case
+        for i in paras:
+            numcount = sum(c.isdigit() for c in i[1])
+            letcount = sum(c.isalpha() for c in i[1])
+            if numcount > letcount:
+                paras.remove(i)      
 
         # find and remove duplicated paragraphs since they're usually metadata
         # use length to reduce number of possible duplicates
@@ -258,7 +269,7 @@ class pdf_scraper(object):
             for i in ref[:-1]:
                 foo += '(?:%s)\D+' % i # add all authors to regex exp 
             foo += '.*' + f'(?:{year}).+[^[\d]'     # add year at the end of the regex expression
-            found = re.search(foo, paragraph)    # find starting location
+            found = re.search(foo, paragraph, re.IGNORECASE)    # find starting location
             if found:
                 loc     = found.span()
                 cite    = paragraph[0:loc[1]]
