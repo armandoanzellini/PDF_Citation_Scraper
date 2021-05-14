@@ -18,7 +18,7 @@ from copy import deepcopy
 
 st.title('PDF Citation Scraper')
 # Get authors and years to look for
-refs  = st.text_input('Last names and years separated by comas with a semicolon denoting a new reference (e.g., Walker, 2005; Saini, Srivastava, Rai, Shamal, Singh, and Tripathi, 2012): ')
+refs  = st.text_input('Last names (optional initials) and years separated by semicolons with a pipe character (|) denoting a new reference (e.g., Walker, P; 2005| Saini; Srivastava; Rai; Shamal; Singh; and Tripathi; 2012): ')
 keywords = st.text_input('Keywords separated by a comma: ')
 simult   = st.checkbox('Check box if keywords and authors should be searched in the same sentence.')
 
@@ -31,11 +31,11 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 # file = open(direct + 'Grosman et al 2008 Sahman burial from Levant.pdf', 'rb')
 # file = open(direct + 'Garvin et al 2014 Dimorphism cranial trait scores.pdf', 'rb')
 
-# refs = 'Saini, Srivastava, Rai, Shamal, Singh, and Tripathi, 2012; Walker, 2008'
-# refs = 'Witten, Brooks, Fenner, 2000; Schultz, 2008'
-# refs = 'Schultz, 2008'
-# refs = 'Walker, 2008'
-# refs = 'ROCHE, WAINER, THISSEN, 1974'
+# refs = 'Saini; Srivastava; Rai, Shamal; Singh; and Tripathi; 2012| Walker; 2008'
+# refs = 'Witten; Brooks; Fenner; 2000| Schultz; 2008'
+# refs = 'Schultz; 2008'
+# refs = 'Walker; 2008'
+# refs = 'ROCHE, AE; WAINER, H; THISSEN, D; 1974| Walker; 2008'
 # keywords = 'sexual dimorphism'
 
 # Define the class and associated functions
@@ -45,11 +45,9 @@ class pdf_scraper(object):
         self.refs     = refs
         
         # take references as input and parse
-        refs = refs.replace(' and ', ', ') # remove 'and's at the beginning to make parsing easier
-        refs = refs.replace(',,', ',') # remove double commas coming from above
-        
-        # ensure references are in title case, with every word capitalized
-        refs = refs.title()
+        refs = refs.replace(' and ', '; ') # remove 'and's at the beginning to make parsing easier
+        refs = refs.replace(';;', ';') # remove double commas coming from above
+
         
         # check if value has been given before turning into list
         if not refs:
@@ -64,12 +62,21 @@ class pdf_scraper(object):
             self.empty_kw = False
                 
         # Make refs into a list
-        reflist = refs.split(';')
-        reflist = [i.split(',') for i in reflist]
+        initial_reflist = refs.split('|')
+        initial_reflist = [i.split(';') for i in initial_reflist]
         
-        # strip blank spaces within the reference lists to clean up
-        for ix in range(len(reflist)):
-            reflist[ix] = [i.strip() for i in reflist[ix]]
+        # separate and remove initials from this list
+        auth_list = []
+        for item in initial_reflist:
+            auth_list += [[i.split(',') for i in item]]
+            
+        # select only the last names to create the reflist
+        reflist = []
+        for i in range(len(auth_list)):
+            temp = []
+            for j in auth_list[i]:
+                temp += [j[0].title().strip()] # remove extra spaces and ensure title case
+            reflist += [temp]
         
         # if researcher provided full list of authors, provide refs with et al
         # or AAA style if 2 or 3 authors
