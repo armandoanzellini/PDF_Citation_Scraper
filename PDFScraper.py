@@ -27,15 +27,9 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'C:\\Users\\Armando\\Desktop\\'
 
-# file = open(direct + 'Pringle-2012-Establishing forensic search meth.pdf', 'rb')
-# file = open(direct + 'Grosman et al 2008 Sahman burial from Levant.pdf', 'rb')
-# file = open(direct + 'Garvin et al 2014 Dimorphism cranial trait scores.pdf', 'rb')
+# file = open(direct + 'Trotter 1954 Preliminary Study of Estimation of Weight.pdf', 'rb')
 
-# refs = 'Saini; Srivastava; Rai, Shamal; Singh; and Tripathi; 2012| Walker; 2008'
-# refs = 'Witten; Brooks; Fenner; 2000| Schultz; 2008'
-# refs = 'Schultz; 2008'
-# refs = 'Walker; 2008'
-# refs = 'ROCHE, AE; WAINER, H; THISSEN, D; 1974| Walker; 2008'
+# refs     = 'Trotter and Gleser;1952'
 # keywords = 'sexual dimorphism'
 
 # Define the class and associated functions
@@ -232,8 +226,10 @@ class pdf_scraper(object):
         
         # Delete all sections shorter than 61 characters since likely not part of paragraph
         paras = [i for i in paras if len(i[1]) > 61]
-               
         
+        # delete all double spaces in each paragraph
+        paras = [[i[0], i[1].replace('  ', ' ')] for i in paras]
+               
         # Now to work on references
         # Split into individual references using REGEX
         references = []
@@ -380,6 +376,19 @@ class pdf_scraper(object):
                         sentences += [s]
             return sentences
         
+        # Function to find old citations as '52 instead of 1952
+        def old_intext_match(paragraph, ref):
+            yr      = ref[1][2:]
+            pattern = rf"({ref[0]}[^A-Za-z]+\'{yr})"
+            citations = re.findall(pattern, paragraph[1])
+            sentences = []
+            temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
+            for s in temp_i:
+                for cite in set(citations):
+                    if s.find(cite) != -1:
+                        sentences += [s]
+            return sentences
+        
         # defining regex function to find sentences with numbered citations
         # def numbered_citations(paragraph, refnum):
         def num_match(paragraph, refnum):
@@ -407,6 +416,11 @@ class pdf_scraper(object):
             for ref in self.intext_refs:
                 for paragraph in paras:
                     sentences += intext_match(paragraph, ref)
+        
+        if not sentences:
+            for ref in self.intext_refs:
+                for paragraph in paras:
+                    sentences += old_intext_match(paragraph, ref)
         
         # Get sentences if citations are numbered or have a range
         if self.cite_nums:
