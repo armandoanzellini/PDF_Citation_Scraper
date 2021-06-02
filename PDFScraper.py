@@ -472,14 +472,14 @@ class pdf_scraper(object):
                 for paragraph in paras:
                     sentences += intext_match(paragraph, ref)
         
-        if not sentences:
+        if not self.cite_nums and not sentences:
             for ref in self.intext_refs:
                 for paragraph in paras:
                     sentences += old_intext_match(paragraph, ref)
-        
-        for ref in self.intext_refs:
-            for paragraph in paras:
-                sentences += alt_intext_match(paragraph, ref)
+        if not self.cite_nums:
+            for ref in self.intext_refs:
+                for paragraph in paras:
+                    sentences += alt_intext_match(paragraph, ref)
 
         
         # Get sentences if citations are numbered or have a range
