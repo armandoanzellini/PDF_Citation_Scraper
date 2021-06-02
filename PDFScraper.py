@@ -25,13 +25,13 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
-# direct = 'C:\\Users\\Armando\\Downloads\\'
+# direct = 'C:\\Users\\arman\\Downloads\\'
 
-# file = open(direct + 'Trotter-Gleser_1958.pdf', 'rb')
+# file = open(direct + 'Spradley and Jantz 2011.pdf', 'rb')
 
 # maybe missing one of the citations!!!!!
 
-# refs     = 'Trotter and Gleser;1952'
+# refs     = 'Walker;2008'
 # keywords = 'sexual dimorphism'
 
 # Define the class and associated functions
@@ -328,15 +328,19 @@ class pdf_scraper(object):
             else:
                 references_fixed += [references[ix]]
         
-          
-        """
-        this one still shows up as separated in references, how to fix?
-        Year has to be in the same line as authors!!!
-        '[17] B.B. Ellwood, D.W. Owsley, S.H. Ellwood, P.A. Mercado-Allinger, Search for the grave of the hanged Texas gunfighter, William Preston Longley, Hist. Arch. 28',
-        '(1994) 94–112.',
-            
-        Also need to fix non-numbered references to add Extract_References button later
-        """
+        # unorphan references
+        cites = []
+        for ix in range(len(references)):
+            pattern = r'^(\[|\d|\()\d{,2}(?=\]|\)|\.)'
+            mtch    = re.match(pattern, references[ix])
+            try:
+                nxtmtch = re.match(pattern, references[ix+1])
+            except:
+                cites += [references[ix]]
+            if mtch and nxtmtch:
+                cites += [references[ix]]
+            elif mtch and not nxtmtch:
+                cites += [references[ix] + ' ' + references[ix+1]]
              
         # Separate the reading portion from the finding matches portion in order to create a "find keyword" function
         
@@ -347,7 +351,7 @@ class pdf_scraper(object):
             foo = r''    # start regex expression for ref number
             for i in ref[:-1]:
                 foo += '(?:%s)\D+' % i # add all authors to regex exp 
-            foo += '.*' + f'(?:{year}).+[^[\d]'     # add year at the end of the regex expression
+            foo += '.*' + f'(?:{year}).+[^\[\d]'     # add year at the end of the regex expression
             found = re.search(foo, paragraph, re.IGNORECASE)    # find starting location
             if found:
                 loc     = found.span()
@@ -362,9 +366,9 @@ class pdf_scraper(object):
         try:
             cite_nums = []
             num_refs  = []
-            for reference in deepcopy(references):
+            for c in deepcopy(cites):
                 for ref in self.reflist:
-                    cite_num, cite = ref_num(reference, ref)
+                    cite_num, cite = ref_num(c, ref)
                     if cite_num:
                         cite_nums += [cite_num]
                         num_refs  += [[cite_num, cite]]
