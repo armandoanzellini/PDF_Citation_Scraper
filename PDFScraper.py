@@ -12,8 +12,20 @@ able to really follow it back
 """
 import fitz
 import streamlit as st
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, 
+                                ListFlowable, ListItem, PageBreak)
+from reportlab.platypus.flowables import HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import black
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_JUSTIFY
+import base64
+from io import BytesIO
 import re
 from copy import deepcopy
+from datetime import date
+from fpdf import FPDF
 
 
 st.title('PDF Citation Scraper')
@@ -27,7 +39,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'C:\\Users\\arman\\Downloads\\'
 
-# file = open(direct + 'Spradley and Jantz 2011.pdf', 'rb')
+# files = [open(direct + 'Spradley and Jantz 2011.pdf', 'rb')]
 
 # maybe missing one of the citations!!!!!
 
@@ -36,9 +48,10 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # Define the class and associated functions
 class pdf_scraper(object):
-    def __init__(self, file, refs, keywords):
+    def __init__(self, file, refs, keywords, together):
         self.file     = file
         self.refs     = refs
+        self.together = together
         
         # take references as input and parse
         refs = refs.replace(' and ', '; ') # remove 'and's at the beginning to make parsing easier
@@ -194,6 +207,7 @@ class pdf_scraper(object):
         orphan = [i for i in orphan if not i[1].startswith('KEY WORDS ')]
         orphan = [i for i in orphan if not i[1].startswith('ABSTRACT ')]
         orphan = [i for i in orphan if not i[1].startswith('Article history: ')]
+        orphan = [i for i in orphan if not i[1].startswith('Available online at:')]
         
         orphan = [i for i in orphan if not i[1].endswith(', Inc. ')]
         
@@ -522,9 +536,10 @@ class pdf_scraper(object):
         
         return kw_sentences
 
-    def find_match(self, together):
+    def find_match(self):
         
-        paras  = self.read_pdf()
+        together = self.together
+        paras    = self.read_pdf()
 
         # check if either refs or keywords are empty
         if not self.empty_ref:
@@ -552,19 +567,19 @@ class pdf_scraper(object):
         # Sort matches by page number
         match = sorted(match, key=lambda x: x[0])
         
-        return match, sentences
+        return match, sentences, self.num_refs
     
-    def return_match(self, together):
+    def return_match(self):
     
-        match, sentences = self.find_match(together)
+        match, sentences, num_refs = self.find_match()
         
         st.title(self.file.name.strip('.pdf'))
         st.title('Finding: ' + str(self.refs))
         
         # Add note to 
-        if self.cite_nums:
+        if num_refs:
             st.markdown('**References numbered in this text as:**')
-            for cite in self.num_refs:
+            for cite in num_refs:
                 st.markdown(f'**_{cite[0]} -> {cite[1]}_**')
         
         # Separating by sentence to rejoin as output
@@ -579,20 +594,192 @@ class pdf_scraper(object):
                     output   += [highlight]
                 else:
                     output   += [s +'.']
-            st.markdown(' '.join(output)) # Flatten ouput list and output
+            st.markdown(' '.join(output).replace('..', '.')) # Flatten ouput list and output
             
-
 #------------------------------------------------------------------------------
 
-hover_text = 'Click Run to start the scraping'
+class Document():
+    #----------------------------------------------------------------------
+    def __init__(self, files, refs, keywords, together):
+        '''
+        Initializes the class
+
+        '''
+        today = date.today()
+        
+        refs = refs.replace(' and ', '; ') # remove 'and's at the beginning to make parsing easier
+        refs = refs.replace(';;', ';')
+        
+        initial_reflist = refs.split('|')
+        initial_reflist = [i.split(';') for i in initial_reflist]
+        
+        title_refs = []
+        for i in initial_reflist:
+           title_refs += [''.join(i)]
+        
+        self.files     = files   
+        self.refs      = refs
+        self.keywords  = keywords
+        self.together  = together
+        
+        self.PAGE_WIDTH, self.PAGE_HEIGHT = letter
+        self.styles = getSampleStyleSheet()
+        
+        self.filename = today.strftime("%d%b%Y") + '_' + '-'.join(title_refs) +'.pdf'    
+        
+    #----------------------------------------------------------------------
+    def createDocument(self):
+        '''
+        Creates the static document including the text and creates signature
+        lines depending on the list of authors passed to it. Also creates top 
+        line of text per page with the name of the person needing to include 
+        their bio
+
+        '''
+        files     = self.files   
+        refs      = self.refs
+        keywords  = self.keywords
+        together  = self.together
+        
+        self.styles.add(ParagraphStyle(name='Justify',   alignment=TA_JUSTIFY))
+        self.styles.add(ParagraphStyle(name='LongQuote', alignment=TA_JUSTIFY,
+                                       leftIndent=24, rightIndent=24))
+        
+        story = [Spacer(1,1*inch)]
+        
+        title = '<font size = 14>' + refs + ' Citation Search' + '</font>'
+        story.append(Paragraph(title, self.styles["Normal"]))
+        story.append(Spacer(1, 48))
+        
+        for file in files:
+            doc_title = '<font size = 14>' + file.name + '</font>'
+            cit_title = '<font size = 14>' + 'Finding: ' + str(refs) + '</font>'
+            
+            story.append(Paragraph(doc_title, self.styles["Normal"]))
+            story.append(Paragraph(cit_title, self.styles["Normal"]))
+            
+            match, sentences, num_refs = pdf_scraper(file, refs, keywords, together).find_match()
+            
+            if num_refs:
+                note = '<font size = 12>' + '**References numbered in this text as:**' + '</font>'
+                story.append(Paragraph(note, self.styles["Normal"]))
+                for cite in num_refs:
+                    numbered = '<font size = 12>' + f'**_{cite[0]} -> {cite[1]}_**' + '</font>'
+                    story.append(Paragraph(numbered, self.styles["Normal"]))
+        
+            # Separating by sentence to rejoin as output
+        
+            for i in match:
+                output = []
+                page = '<font size = 12>' + f'**Page {i[0]}**' + '</font>'
+                story.append(Paragraph(page, self.styles["Normal"]))
+                temp_i    = re.split(r'\.\s(?=[A-Z])', i[1])
+                for s in temp_i:
+                    if any(sentence in s for sentence in sentences):
+                        highlight = '**' + s.strip() + '.**' #add markdown bold
+                        output   += [highlight]
+                    else:
+                        output   += [s +'.']
+                story.append(Paragraph(' '.join(output).replace('..', '.'),
+                                       self.styles["Normal"]))
+                             
+            self.story = story           
+            
+    #----------------------------------------------------------------------
+    def run(self):
+        '''
+        runs the class functions together to create the pdf
+
+        '''
+           
+        buffer = BytesIO()
+        
+        doc = SimpleDocTemplate(self.filename + '.pdf', 
+                                pagesize     = letter, 
+                                topMargin    = 0.75*inch,
+                                bottomMargin = 0.75*inch,
+                                leftMargin   = 0.75*inch,
+                                rightMargin  = 0.76*inch)
+        
+        self.createDocument()
+        
+        doc.build(self.story)
+        
+        buffer.seek(0)
+        pdf: bytes = buffer.getvalue()
+
+        '''
+        files     = self.files   
+        refs      = self.refs
+        keywords  = self.keywords
+        together  = self.together
+        
+        pdf = FPDF('P', 'in', 'Letter')
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 16)
+        
+        title = refs + ' Citation Search' 
+        
+        pdf.cell(5, 1, title, 0, 1)
+        
+               
+        for file in files:
+            
+            doc_title =  file.name 
+            cit_title =  'Finding: ' + str(refs) 
+            
+            pdf.cell(0, 1, doc_title, 0, 1)
+            pdf.cell(0, 1, cit_title, 0, 1)
+            
+            match, sentences, num_refs = pdf_scraper(file, refs, keywords, together).find_match()
+            
+            if num_refs:
+                note =  '**References numbered in this text as:**' 
+                pdf.cell(0, 2, note, 0, 1)
+                for cite in num_refs:
+                    numbered = f'**_{cite[0]} -> {cite[1]}_**'
+                    pdf.cell(0, 2, numbered, 0, 1)
+        
+            # Separating by sentence to rejoin as output
+        
+            for i in match:
+                output = []
+                page =  f'**Page {i[0]}**'
+                pdf.cell(0, 1, page, 0, 1)
+                temp_i    = re.split(r'\.\s(?=[A-Z])', i[1])
+                for s in temp_i:
+                    if any(sentence in s for sentence in sentences):
+                        highlight = '**' + s.strip() + '.**' #add markdown bold
+                        output   += [highlight]
+                    else:
+                        output   += [s +'.']
+                        text = ' '.join(output).replace('..', '.')
+                        text2 = text.encode('latin-1', 'replace').decode('latin-1')
+                pdf.multi_cell(0, 1, text2, 0, 1)
+                
+        pdf.output(direct+filename)
+        ''' 
+        
+        def create_download_link(val, filename):
+            b64 = base64.b64encode(val)  # val looks like b'...'
+            return f'<a href="data:application/octet-stream;base64,{b64.decode()}" download="{filename}.pdf">Download file</a>'
+                
+        html = create_download_link(pdf, "test")
+        
+        st.markdown(html, unsafe_allow_html=True)
+#------------------------------------------------------------------------------        
+hover_text   = 'Click Run to start the scraping'
+report_hover = 'Click to export PDF report'
 
 # Run the program if all criteria are met
 if refs or keywords and uploaded_files:
-    run = st.button('Run', help=hover_text)
+    run    = st.button('Run', help=hover_text)
+    # report = st.button('Export Report', help=report_hover)
     if run:
         for uploaded_file in uploaded_files: 
-            pdf_scraper(uploaded_file, refs, keywords).return_match(together=simult)
-
+            pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
+    #if report:
+        #Document(uploaded_files, refs, keywords, together=simult).run()
 
 
 
