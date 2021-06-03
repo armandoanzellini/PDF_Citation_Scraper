@@ -12,11 +12,10 @@ able to really follow it back
 """
 import fitz
 import streamlit as st
-from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, 
-                                ListFlowable, ListItem, PageBreak)
-from reportlab.platypus.flowables import HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import black
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer)
+#from reportlab.platypus.flowables import HRFlowable
+#from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+#from reportlab.lib.colors import black
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_JUSTIFY
@@ -25,7 +24,7 @@ from io import BytesIO
 import re
 from copy import deepcopy
 from datetime import date
-from fpdf import FPDF
+#from fpdf import FPDF
 
 
 st.title('PDF Citation Scraper')
