@@ -36,14 +36,14 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
-# direct = 'C:\\Users\\arman\\Downloads\\'
+# direct = 'C:\\Users\\arman\\Downloads\\Calibration-PDFs\\'
 
-# files = [open(direct + 'Spradley and Jantz 2011.pdf', 'rb')]
+# files = [open(direct + 'Macaluso_2015.pdf', 'rb')]
 
 # maybe missing one of the citations!!!!!
 
-# refs     = 'Walker;2008'
-# keywords = 'sexual dimorphism'
+# refs     = 'Trotter and Gleser;1952'
+# keywords = ''
 
 # Define the class and associated functions
 class pdf_scraper(object):
@@ -243,6 +243,9 @@ class pdf_scraper(object):
         # create list without page numbers
         unorphan = [i[1].strip() for i in orphan]
         
+        # clean unorphan of empty strings
+        unorphan = [i for i in unorphan if i]
+        
         # stop the orphaning by looking for uppercase starts and period ends
         def end_condition(string):
             skip = ['Dr.',
@@ -318,6 +321,13 @@ class pdf_scraper(object):
         
         # delete all double spaces in each paragraph
         paras = [[i[0], i[1].replace('  ', ' ')] for i in paras]
+        
+        # Add space between all digits and words (if none there)
+        # This avoids superscript issues
+        # for paragraph in paras:
+        #     pattern = r'[a-z]+()(?=\d+)' #lookahead and lookbehind
+        #     superscripts = re.sub(pattern, ' ', paragraph[1])
+                
                
         # Now to work on references
         # Split into individual references using REGEX
@@ -395,7 +405,7 @@ class pdf_scraper(object):
         range_cite = []
         for paragraph in paras:
             for num in cite_nums:
-                pattern    = r'[\[|\(|,](\d+[-|–]\d+)[\]|\)|,)]' # either long or short dash
+                pattern    = r'[\[|\(|,|\w](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
                 posranges  = re.findall(pattern, paragraph[1])
                 for dash in posranges:
                     rango     = re.split(r'-|–', dash)
@@ -433,7 +443,7 @@ class pdf_scraper(object):
         # Function to find old citations as '52 instead of 1952
         def old_intext_match(paragraph, ref):
             yr      = ref[1][2:]
-            pattern = rf"({ref[0]}[^A-Za-z]+\'{yr})"
+            pattern = rf"({ref[0]}[^A-Za-z]+[\'|\’]{yr})"
             citations = re.findall(pattern, paragraph[1])
             sentences = []
             temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
