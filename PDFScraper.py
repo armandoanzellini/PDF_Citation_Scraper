@@ -14,7 +14,7 @@ import fitz
 import streamlit as st
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer)
 #from reportlab.platypus.flowables import HRFlowable
-#from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 #from reportlab.lib.colors import black
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -38,7 +38,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'C:\\Users\\arman\\Downloads\\Calibration-PDFs\\'
 
-# files = [open(direct + 'Macaluso_2015.pdf', 'rb')]
+# files = [open(direct + 'Sylvester-et-al_2008.pdf', 'rb')]
 
 # maybe missing one of the citations!!!!!
 
@@ -207,10 +207,13 @@ class pdf_scraper(object):
         orphan = [i for i in orphan if not i[1].startswith('ABSTRACT ')]
         orphan = [i for i in orphan if not i[1].startswith('Article history: ')]
         orphan = [i for i in orphan if not i[1].startswith('Available online at:')]
-        
+        orphan = [i for i in orphan if not i[1].startswith('©')]
+        orphan = [i for i in orphan if not i[1].startswith('Australian Journal of Forensic Sciences 241')]
+                
         orphan = [i for i in orphan if not i[1].endswith(', Inc. ')]
         
         orphan = [i for i in orphan if not ' All rights reserved. ' in i[1]] # ending with this is also how you find the abstract in some journals
+        orphan = [i for i in orphan if not 'http://dx.doi.org/' in i[1]]
         orphan = [i for i in orphan if not '@' in i[1]]
         orphan = [i for i in orphan if not ' www.'  in i[1]]
         orphan = [i for i in orphan if not ' w ww.' in i[1]]
@@ -324,10 +327,8 @@ class pdf_scraper(object):
         
         # Add space between all digits and words (if none there)
         # This avoids superscript issues
-        # for paragraph in paras:
-        #     pattern = r'[a-z]+()(?=\d+)' #lookahead and lookbehind
-        #     superscripts = re.sub(pattern, ' ', paragraph[1])
-                
+        pattern = r'(?<=[a-z])()(?=\d)' #lookahead and lookbehind
+        paras = [[i[0], re.sub(pattern, ' ', i[1])] for i in paras]                
                
         # Now to work on references
         # Split into individual references using REGEX
@@ -405,7 +406,7 @@ class pdf_scraper(object):
         range_cite = []
         for paragraph in paras:
             for num in cite_nums:
-                pattern    = r'[\[|\(|,|\w](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
+                pattern    = r'[\[|\(|,|\w|\s](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
                 posranges  = re.findall(pattern, paragraph[1])
                 for dash in posranges:
                     rango     = re.split(r'-|–', dash)
@@ -470,7 +471,7 @@ class pdf_scraper(object):
         # defining regex function to find sentences with numbered citations
         # def numbered_citations(paragraph, refnum):
         def num_match(paragraph, refnum):
-            pattern = r'[\[|\(|,]' + refnum + '[\]|\)|,)](?!\d{3})'
+            pattern = r'[\[|\(|,|\s]' + refnum + '[\]|\)|,)](?!\d{3})'
             sentences = []
             temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
             for s in temp_i:
@@ -518,7 +519,7 @@ class pdf_scraper(object):
                     sentences += range_match(paragraph, ref)
         
         # remove any duplication of sentences
-        ref_sentences = list(set(sentences))
+        ref_sentences = list(set(sentences))        
 
         return ref_sentences
     
