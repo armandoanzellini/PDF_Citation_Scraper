@@ -605,14 +605,15 @@ class pdf_scraper(object):
             
 #-----------------------------------------------------------------------------      
 class word_cloud():
-    def __init__(self, files, refs):
+    def __init__(self, files, refs, keywords):
         self.files = files
         self.refs  = refs
+        self.keywords =  keywords
         
     def run(self):
         files = self.files
         refs  = self.refs
-        keywords = []
+        keywords = ''
         
         stopwords = set(STOPWORDS)
         stopwords.update([])
@@ -625,7 +626,7 @@ class word_cloud():
                                                      keywords,
                                                      together=False).find_match()
             
-            words += [sentence.split(' ') for sentence in sentences]
+            words += sentences
             
         # Compile the words into a single paragraph to word cloud
         text = ' '.join(words)
@@ -653,7 +654,7 @@ if refs or keywords and uploaded_files:
         for uploaded_file in uploaded_files: 
             pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
     if wc:
-        word_cloud(uploaded_files, refs).run()
+        word_cloud(uploaded_files, refs, keywords).run()
     #if report:
         #Document(uploaded_files, refs, keywords, together=simult).run()
 
