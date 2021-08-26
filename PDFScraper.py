@@ -13,10 +13,14 @@ able to really follow it back
 import fitz
 import streamlit as st
 import re
+import base64
 import matplotlib.pyplot as plt
+from io import BytesIO
 from copy import deepcopy
 from datetime import date
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+#from fpdf import FPDF
+
 
 st.title('PDF Citation Scraper')
 # Get authors and years to look for
@@ -29,7 +33,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'C:\\Users\\arman\\Downloads\\Calibration-PDFs\\'
 
-# files = [open(direct + 'Huber-Jowett_1973.pdf', 'rb'), open(direct + 'Holland_2015.pdf', 'rb')]
+# files = [open(direct + 'Sylvester-et-al_2008.pdf', 'rb')]
 
 # maybe missing one of the citations!!!!!
 
@@ -129,19 +133,17 @@ class pdf_scraper(object):
             for i in reversed(range(len(txt))):
                 for j in range(len(txt[i][1])):
                     for k in txt[i][1][j]:
-                        if 'references\n' in str(k).casefold():
+                        if 'references' in str(k).casefold():
                             return i,j
-                        elif 'references cited\n' in str(k).casefold():
+                        elif 'literature cited' in str(k).casefold():
                             return i,j
-                        elif 'literature cited\n' in str(k).casefold():
-                            return i,j
-                        elif 'literature c1 ted\n' in str(k).casefold():
+                        elif 'literature c1 ted' in str(k).casefold():
                             return i,j
                 for j in range(len(txt[i][1])):
                     for k in txt[i][1][j]:
-                        if 'acknowledgments\n' in str(k).casefold():
+                        if 'acknowledgments' in str(k).casefold():
                             return i,j
-                        elif 'acknowledgment\n' in str(k).casefold():
+                        elif 'acknowledgment' in str(k).casefold():
                             return i,j
         try:                
             pg, par = workscited(text)
@@ -461,9 +463,6 @@ class pdf_scraper(object):
                         sentences += [s]
             return sentences
         
-        # find citations in law style references
-        
-        
         # defining regex function to find sentences with numbered citations
         # def numbered_citations(paragraph, refnum):
         def num_match(paragraph, refnum):
@@ -601,8 +600,7 @@ class pdf_scraper(object):
                 else:
                     output   += [s +'.']
             st.markdown(' '.join(output).replace('..', '.')) # Flatten ouput list and output
-            
-            
+
 #-----------------------------------------------------------------------------      
 class word_cloud():
     def __init__(self, files, refs, keywords):
@@ -657,6 +655,7 @@ if refs or keywords and uploaded_files:
         word_cloud(uploaded_files, refs, keywords).run()
     #if report:
         #Document(uploaded_files, refs, keywords, together=simult).run()
+
 
 
 
