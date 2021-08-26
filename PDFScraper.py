@@ -603,18 +603,31 @@ class pdf_scraper(object):
 
 #-----------------------------------------------------------------------------      
 class word_cloud():
-    def __init__(self, files, refs, keywords):
+    def __init__(self, files, refs, keywords, together):
         self.files = files
         self.refs  = refs
-        self.keywords =  keywords
+        self.keywords = keywords
+        self.together = together
         
+        cites = refs.split('|') # split for multiple references
+        auths = [c.split(';')[0] for c in cites] # remove year
+        
+        auths = [a.split(' and ')[:] for a in auths]
+        auths = [name for sublist in auths for name in sublist] # flatten list
+        
+        keywds = keywords.split(',')
+        keywds = [k.strip() for k in keywds]
+        
+        self.stpwds = auths + keywds
+                
     def run(self):
         files = self.files
         refs  = self.refs
-        keywords = ''
+        keywords = self.keywords
+        together = self.together
         
         stopwords = set(STOPWORDS)
-        stopwords.update([])
+        stopwords.update([self.stpwds])
         
         words = []
         
@@ -622,7 +635,7 @@ class word_cloud():
             match, sentences, num_refs = pdf_scraper(file,
                                                      refs,
                                                      keywords,
-                                                     together=False).find_match()
+                                                     together=together).find_match()
             
             words += sentences
             
@@ -631,13 +644,14 @@ class word_cloud():
         
         # Set traits for word cloud
         wc = WordCloud(background_color="white",
-                       colormap="hot", 
+                       colormap="viridis", 
                        stopwords=stopwords).generate(text)
         
         # show the figure
-        plt.imshow(wc, interpolation="bilinear")
-        plt.axis("off")
-        st.pyplot()
+        ax, fig = plt.subplots()
+        ax.imshow(wc, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
             
 #-----------------------------------------------------------------------------       
 hover_text   = 'Click Run to start the scraping'
@@ -652,7 +666,7 @@ if refs or keywords and uploaded_files:
         for uploaded_file in uploaded_files: 
             pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
     if wc:
-        word_cloud(uploaded_files, refs, keywords).run()
+        word_cloud(uploaded_files, refs, keywords, together=simult).run()
     #if report:
         #Document(uploaded_files, refs, keywords, together=simult).run()
 
