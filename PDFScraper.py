@@ -650,7 +650,7 @@ class word_cloud():
                        stopwords=stopwords).generate(text)
         
         # show the figure
-        ax, fig = plt.subplots()
+        fig, ax = plt.subplots()
         ax.imshow(wc, interpolation="bilinear")
         ax.axis("off")
         st.pyplot(fig)
