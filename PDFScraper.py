@@ -609,6 +609,8 @@ class word_cloud():
         self.keywords = keywords
         self.together = together
         
+        ignore = []
+        
         cites = refs.split('|') # split for multiple references
         auths = [c.split(';')[0] for c in cites] # remove year
         
@@ -618,7 +620,7 @@ class word_cloud():
         keywds = keywords.split(',')
         keywds = [k.strip() for k in keywds]
         
-        self.stpwds = auths + keywds
+        self.stpwds = auths + keywds + ignore
                 
     def run(self):
         files = self.files
@@ -627,7 +629,7 @@ class word_cloud():
         together = self.together
         
         stopwords = set(STOPWORDS)
-        stopwords.update([self.stpwds])
+        stopwords.update(self.stpwds)
         
         words = []
         
