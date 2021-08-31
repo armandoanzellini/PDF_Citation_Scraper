@@ -14,11 +14,12 @@ import fitz
 import streamlit as st
 import re
 import base64
+import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 from copy import deepcopy
 from datetime import date
-from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from wordcloud import WordCloud, STOPWORDS
 #from fpdf import FPDF
 
 
@@ -649,15 +650,52 @@ class word_cloud():
                        colormap="viridis", 
                        stopwords=stopwords).generate(text)
         
-        # show the figure
+        # Create word counts to export and download (for batch of files)
+        counts = WordCloud(stopwords=stopwords).process_text(text)
+        
+        count_df = pd.DataFrame.from_dict(counts, orient='index', 
+                                                  columns = ['Count'])
+        
+        count_df.index.name='Words' # add title to index
+        
+        count_df.sort_values(by=['Count'], ascending = False, 
+                                           inplace   = True) # sort values descending
+        
+        
+        # show the Word Cloud figure
         fig, ax = plt.subplots()
         ax.imshow(wc, interpolation="bilinear")
         ax.axis("off")
         st.pyplot(fig)
+        
+        return count_df
             
-#-----------------------------------------------------------------------------       
+#-----------------------------------------------------------------------------
+def download_csv(dataframe, filename):
+    '''
+    
+    Parameters
+    ----------
+    dataframe : TYPE
+        DESCRIPTION.
+    filename  : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
+    csv = dataframe.to_csv()
+    b64 = base64.b64encode(csv.encode()).decode()  # some strings
+    linko= f'<a href="data:file/csv;base64,{b64}" download="output.csv">Download csv file</a>'
+    st.markdown(linko, unsafe_allow_html=True)
+
+
+#-----------------------------------------------------------------------------
 hover_text   = 'Click Run to start the scraping'
 report_hover = 'Click to export PDF report'
+count_hover  = 'Click to create link and download counts table'
 
 # Run the program if all criteria are met
 if refs or keywords and uploaded_files:
@@ -668,10 +706,8 @@ if refs or keywords and uploaded_files:
         for uploaded_file in uploaded_files: 
             pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
     if wc:
-        word_cloud(uploaded_files, refs, keywords, together=simult).run()
-    #if report:
-        #Document(uploaded_files, refs, keywords, together=simult).run()
-
+        counts = word_cloud(uploaded_files, refs, keywords, together=simult).run()
+        download_csv(counts, 'output')
 
 
 
