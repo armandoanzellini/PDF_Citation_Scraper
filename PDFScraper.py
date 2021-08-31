@@ -688,7 +688,7 @@ def download_csv(dataframe, filename):
     '''
     csv = dataframe.to_csv()
     b64 = base64.b64encode(csv.encode()).decode()  # some strings
-    linko= f'<a href="data:file/csv;base64,{b64}" download="output.csv">Download csv file</a>'
+    linko= f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">Download CSV file</a>'
     st.markdown(linko, unsafe_allow_html=True)
 
 
@@ -707,7 +707,8 @@ if refs or keywords and uploaded_files:
             pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
     if wc:
         counts = word_cloud(uploaded_files, refs, keywords, together=simult).run()
-        download_csv(counts, 'output')
+        fname = refs.replace(' ', '').replace(';', '').replace('|', '')
+        download_csv(counts, fname)
 
 
 
