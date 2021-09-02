@@ -610,7 +610,7 @@ class word_cloud():
         self.keywords = keywords
         self.together = together
         
-        ignore = []
+        ignore = ['et', 'al', ]
         
         cites = refs.split('|') # split for multiple references
         auths = [c.split(';')[0] for c in cites] # remove year
@@ -632,13 +632,16 @@ class word_cloud():
         stopwords = set(STOPWORDS)
         stopwords.update(self.stpwds)
         
-        words = []
+        words  = []
+        fnames = []
         
         for file in files:
             match, sentences, num_refs = pdf_scraper(file,
                                                      refs,
                                                      keywords,
                                                      together=together).find_match()
+            
+            fnames += [[sentences, file.name]]
             
             words += sentences
             
@@ -661,6 +664,8 @@ class word_cloud():
         count_df.sort_values(by=['Count'], ascending = False, 
                                            inplace   = True) # sort values descending
         
+        # create csv of sentences and PDF names
+        sent_df = pd.DataFrame(fnames, columns=['Sentences', 'PDFs'])
         
         # show the Word Cloud figure
         fig, ax = plt.subplots()
@@ -668,10 +673,10 @@ class word_cloud():
         ax.axis("off")
         st.pyplot(fig)
         
-        return count_df
+        return count_df, sent_df
             
 #-----------------------------------------------------------------------------
-def download_csv(dataframe, filename):
+def download_csv(dataframe, filename, display_text, index=True):
     '''
     
     Parameters
@@ -686,9 +691,9 @@ def download_csv(dataframe, filename):
     None.
 
     '''
-    csv = dataframe.to_csv()
+    csv = dataframe.to_csv(index=index)
     b64 = base64.b64encode(csv.encode()).decode()  # some strings
-    linko= f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">Download CSV file</a>'
+    linko= f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">{display_text}</a>'
     st.markdown(linko, unsafe_allow_html=True)
 
 
@@ -706,9 +711,13 @@ if refs or keywords and uploaded_files:
         for uploaded_file in uploaded_files: 
             pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
     if wc:
-        counts = word_cloud(uploaded_files, refs, keywords, together=simult).run()
+        counts, sent = word_cloud(uploaded_files, refs, keywords, together=simult).run()
         fname = refs.replace(' ', '').replace(';', '').replace('|', '')
-        download_csv(counts, fname)
+        download_csv(counts, fname +'_Counts', 
+                         'Download CSV of Counts')
+        download_csv(sent, fname + '_Sentences', 
+                         'Download CSV of Sentences', 
+                             index=False)
 
 
 
