@@ -32,9 +32,9 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
-# direct = 'C:\\Users\\arman\\Downloads\\Calibration-PDFs\\'
+# direct = 'C:\\Users\\aanzellini\\Downloads\\'
 
-# files = [open(direct + 'Sylvester-et-al_2008.pdf', 'rb')]
+# files = [open(direct + 'Auerbach and Ruff 2010.pdf', 'rb')]
 
 # maybe missing one of the citations!!!!!
 
@@ -214,6 +214,23 @@ class pdf_scraper(object):
         orphan = [i for i in orphan if not ' www.'  in i[1]]
         orphan = [i for i in orphan if not ' w ww.' in i[1]]
         
+        # Remove paragraphs that are mostly digits since they represent a table
+        for i in orphan:
+            numcount = sum(c.isdigit() for c in i[1])
+            letcount = sum(c.isalpha() for c in i[1])
+            if numcount > letcount:
+                orphan.remove(i)
+        
+        # digit followed directly by a capitalized letter is likely to be a
+        # footnote, so removing for ease
+        foot = []
+        
+        pattern = r'\d{1,2}[A-Z]'
+        for i in orphan:
+            if re.match(pattern, i[1]):
+                foot += [i]
+                orphan.remove(i)
+               
         # find and remove duplicated paragraphs since they're usually metadata
         # use length to reduce number of possible duplicates
         non_dups = [orphan[0][1][:-5]] # have to do -5 to remove page numbers from duplicates
@@ -485,25 +502,37 @@ class pdf_scraper(object):
                     sentences += [s]
             return sentences
         
-        # Get sentences in which the match occurred for in-text citations   
-        if not self.cite_nums:
+        # Get sentences in which the match occurred for in-text citations
+        try:
             sentences = []
             for ref in self.intext_refs:
                 for paragraph in paras:
                     sentences += intext_match(paragraph, ref)
+        except:
+            pass
         
-        if not self.cite_nums and not sentences:
-            for ref in self.intext_refs:
-                for paragraph in paras:
-                    sentences += old_intext_match(paragraph, ref)
-        if not self.cite_nums:
-            for ref in self.intext_refs:
+        if not sentences:
+            try:
+                for ref in self.intext_refs:
+                    for paragraph in paras:
+                        sentences += old_intext_match(paragraph, ref)
+            except:
+                pass
+        
+        try:
+           for ref in self.intext_refs:
                 for paragraph in paras:
                     sentences += alt_intext_match(paragraph, ref)
-
+        except:
+            pass
+        
+        # clean up if cite_nums from poor reading of references for output
+        if sentences and self.cite_nums:
+            self.cite_nums = []
+            self.num_refs  = []
         
         # Get sentences if citations are numbered or have a range
-        if self.cite_nums:
+        if self.cite_nums and not sentences:
             sentences = []
             for ref in self.cite_nums:
                 for paragraph in paras:
