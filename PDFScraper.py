@@ -417,17 +417,17 @@ class pdf_scraper(object):
 
         # use regex to find where number ranges between brackets may include cite nums
         range_cite = []
-        for paragraph in paras:
-            for num in cite_nums:
-                pattern    = r'[\[|\(|,|\w|\s](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
-                posranges  = re.findall(pattern, paragraph[1])
-                for dash in posranges:
-                    rango     = re.split(r'-|–', dash)
-                    if not num:
-                        pass
-                    else:
+        try:
+            for paragraph in paras:
+                for num in cite_nums:
+                    pattern    = r'[\[|\(|,|\w|\s](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
+                    posranges  = re.findall(pattern, paragraph[1])
+                    for dash in posranges:
+                        rango     = re.split(r'-|–', dash)
                         if int(rango[0]) <= int(num) <= int(rango[1]):
                             range_cite += [f'{dash}']
+        except ValueError:
+            range_cite = []
         
         self.range_cite = range_cite                
         self.cite_nums = cite_nums
