@@ -423,8 +423,9 @@ class pdf_scraper(object):
                 posranges  = re.findall(pattern, paragraph[1])
                 for dash in posranges:
                     rango     = re.split(r'-|–', dash)
-                    if int(rango[0]) <= int(num) <= int(rango[1]):
-                        range_cite += [f'{dash}']
+                    if num:
+                        if int(rango[0]) <= int(num) <= int(rango[1]):
+                            range_cite += [f'{dash}']
         
         self.range_cite = range_cite                
         self.cite_nums = cite_nums
