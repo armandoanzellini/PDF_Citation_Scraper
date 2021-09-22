@@ -34,7 +34,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'C:\\Users\\aanzellini\\Downloads\\'
 
-# files = [open(direct + 'Auerbach and Ruff 2010.pdf', 'rb')]
+# file = open(direct + 'Rutishauser 1968.pdf', 'rb')
 
 # maybe missing one of the citations!!!!!
 
@@ -162,14 +162,14 @@ class pdf_scraper(object):
                 for i in range(par):
                     last_page   += [[text[pag][0], 
                                      text[pag][1][i][4].replace('\n', ' ').replace('- ', '')]]
-            elif pag > pg:
+            elif pag > pg and pg != -1:
                 works_cited += [i[4] for i in text[pag][1]]
             else:
                 for p in range(len(text[pag][1])):
                     orphan +=[[text[pag][0],
                                    text[pag][1][p][4].replace('\n', ' ').replace('- ', '')]]
         
-        orphan += last_page
+        orphan += last_page # if blank it does nothing
         
         # retrieve abstract in case needed later
         try:
