@@ -233,7 +233,7 @@ class pdf_scraper(object):
                
         # find and remove duplicated paragraphs since they're usually metadata
         # use length to reduce number of possible duplicates
-        non_dups = [orphan[0][1][:-5]] # have to do -5 to remove page numbers from duplicates
+        non_dups = [orphan[0][1][:-3]] # have to do -5 to remove page numbers from duplicates
         dups     = []
         for ix in range(1, len(orphan)):
             if orphan[ix][1][:-5] in non_dups:
@@ -244,7 +244,7 @@ class pdf_scraper(object):
         # find the first instance of the duplication in order to remove all dups
         if dups:
             for ix in range(len(orphan)):
-                if orphan[ix][1][:-5] == orphan[dups[0]][1][:-5] and ix not in dups:
+                if orphan[ix][1][:-3] == orphan[dups[0]][1][:-3] and ix not in dups:
                     dups += [ix]
                 
         # sort dups index list to prepare to drop the items in the orphan list
