@@ -4,26 +4,24 @@ Created on Tue Mar 23 16:26:51 2021
 
 @author: Armando Anzellini
 
-Find paper on logistic regression over discriminant function for sex estimation
-
-We'll have search terms as well to search and how they change over time to be
-able to really follow it back
+Looks for citations in PDF file and extracts text. Can select to create a word
+cloud from multiple PDF files or extract paragraph and sentence in which citation
+is found.
 
 """
-import fitz
-import streamlit as st
 import re
+import math
+import fitz
 import base64
+import traceback
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
-from io import BytesIO
 from copy import deepcopy
-from datetime import date
 from wordcloud import WordCloud, STOPWORDS
-#from fpdf import FPDF
-
 
 st.title('PDF Citation Scraper')
+
 # Get authors and years to look for
 refs  = st.text_input('Last names (optional initials) and years separated by semicolons with a pipe character (|) denoting a new reference (e.g., Walker, P; 2005| Saini; Srivastava; Rai; Shamal; Singh; and Tripathi; 2012): ')
 keywords = st.text_input('Keywords separated by a comma: ')
@@ -32,26 +30,45 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
-# direct = 'C:\\Users\\aanzellini\\Downloads\\'
+# direct = 'D:\\Users\\Armando\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
 
-# file = open(direct + 'Rutishauser 1968.pdf', 'rb')
+# file = open(direct + 'Gualdi-Russo-et-al_2018.pdf', 'rb')
 
-# maybe missing one of the citations!!!!!
+# Auerhbach and Ruff 2010
 
 # refs     = 'Trotter and Gleser;1952'
+
 # keywords = ''
+
+# take references as input and parse
+refs = refs.replace(' and ', '; ') # remove 'and's at the beginning to make parsing easier
+refs = refs.replace(';;', ';') # remove double commas coming from above
+
+# Make refs into a list
+initial_reflist = refs.split('|')
+initial_reflist = [i.split(';') for i in initial_reflist]
+ 
+# separate and remove initials from this list
+auth_list = []
+for item in initial_reflist:
+    auth_list += [[i.split(',') for i in item]]
+     
+# select only the last names to create the reflist
+reflist = []
+for i in range(len(auth_list)):
+    temp = []
+    for j in auth_list[i]:
+        temp += [j[0].title().strip()] # remove extra spaces and ensure title case
+    reflist += [temp]
+
+ref = reflist[0]       
 
 # Define the class and associated functions
 class pdf_scraper(object):
-    def __init__(self, file, refs, keywords, together):
+    def __init__(self, file, ref, keywords, together):
         self.file     = file
-        self.refs     = refs
+        self.ref      = ref
         self.together = together
-        
-        # take references as input and parse
-        refs = refs.replace(' and ', '; ') # remove 'and's at the beginning to make parsing easier
-        refs = refs.replace(';;', ';') # remove double commas coming from above
-
         
         # check if value has been given before turning into list
         if not refs:
@@ -63,330 +80,439 @@ class pdf_scraper(object):
         if not keywords:
             self.empty_kw = True # give a value to be checked later if empty
         else:
-            self.empty_kw = False
-                
-        # Make refs into a list
-        initial_reflist = refs.split('|')
-        initial_reflist = [i.split(';') for i in initial_reflist]
-        
-        # separate and remove initials from this list
-        auth_list = []
-        for item in initial_reflist:
-            auth_list += [[i.split(',') for i in item]]
-            
-        # select only the last names to create the reflist
-        reflist = []
-        for i in range(len(auth_list)):
-            temp = []
-            for j in auth_list[i]:
-                temp += [j[0].title().strip()] # remove extra spaces and ensure title case
-            reflist += [temp]
-        
-        # if researcher provided full list of authors, provide refs with et al
-        # or AAA style if 2 or 3 authors
-        intext_refs = []
-        for j in reflist:
-            if len(j) < 2:
-                Exception('At least one of your references is not in the right format!')
-            if len(j) == 2:
-                intext_refs += [[j[0], j[1]]]
-            if len(j) > 3:
-                intext_refs += [[j[0] + ' et al.', j[-1]]]
-            if len(j) == 3:
-                co_auth1 = f'{j[0]} and {j[1]}'
-                co_auth2 = f'{j[0]}, {j[1]}'
-                co_auth3 = f'{j[0]} & {j[1]}'
-                intext_refs += [[co_auth1, j[-1]],
-                                [co_auth2, j[-1]],
-                                [co_auth3, j[-1]]]
-            if len(j) == 4:
-                aaa_style1 = f'{j[0]}, {j[1]}, and {j[2]}'
-                aaa_style2 = f'{j[0]}, {j[1]} and {j[2]}'
-                aaa_style3 = f'{j[0]}, {j[1]}, {j[2]}'
-                aaa_style4 = f'{j[0]}, {j[1]}, & {j[2]}'
-                aaa_style5 = f'{j[0]}, {j[1]} & {j[2]}'
-                intext_refs += [[aaa_style1, j[-1]],
-                                [aaa_style2, j[-1]],
-                                [aaa_style3, j[-1]],
-                                [aaa_style4, j[-1]],
-                                [aaa_style5, j[-1]]]
-                
+            self.empty_kw = False 
+
         #split the keywords and clean up for searching
         keywords = keywords.split(',')
         keywords = [k.strip() for k in keywords]
-        
-        
-        self.keywords    = keywords
-        self.reflist     = reflist
-        self.intext_refs = intext_refs
 
-    def read_pdf(self):
+        self.keywords = keywords
+
+    def text_extract(self):
         
-        # Open the pdf as text per page and per paragraph (return [page, paragraph])
-        with fitz.open(stream=self.file.read(), filetype = "pdf") as doc: # opening BytesIO stream
-            text = []
-            for page in doc:
-                text += [[page.number + 1, page.get_text("blocks")]]
+        file = self.file
+    
+        doc = fitz.open(stream=file.read(), filetype = "pdf") # opening BytesIO stream
         
-        # Separate Reference paragraphs from text paragraphs
-        # create function to easily return necessary indices and break out of loop
-        def workscited(txt):
-            for i in reversed(range(len(txt))):
-                for j in range(len(txt[i][1])):
-                    for k in txt[i][1][j]:
-                        if 'references' in str(k).casefold():
-                            return i,j
-                        elif 'literature cited' in str(k).casefold():
-                            return i,j
-                        elif 'literature c1 ted' in str(k).casefold():
-                            return i,j
-                for j in range(len(txt[i][1])):
-                    for k in txt[i][1][j]:
-                        if 'acknowledgments' in str(k).casefold():
-                            return i,j
-                        elif 'acknowledgment' in str(k).casefold():
-                            return i,j
-        try:                
-            pg, par = workscited(text)
-        except:
-            pg, par = -1, -1
+        styles = {}
+        font_counts = {}
+        texts = []
+        vals = ['size', 'flags', 'text']
+        imag = 0
         
-        # Create lists of works cited paragraphs and regular paragraphs
-        works_cited = []
-        orphan  = []
-        last_page   = []
-        for pag in range(len(text)):
-            if pag == pg:
-                for p in range(par + 1, len(text[pag][1])):
-                    works_cited += [text[pag][1][p][4]]
-                for i in range(par):
-                    last_page   += [[text[pag][0], 
-                                     text[pag][1][i][4].replace('\n', ' ').replace('- ', '')]]
-            elif pag > pg and pg != -1:
-                works_cited += [i[4] for i in text[pag][1]]
+        for page in doc:
+            blocks = page.getText("dict")["blocks"]
+            for b in blocks:  # iterate through the text blocks
+                if b['type'] == 1:
+                    imag += 1
+                if b['type'] == 0:  # block contains text
+                    for l in b["lines"]:  # iterate through the text lines
+                        for s in l["spans"]:  # iterate through the text spans
+                            # text in blocks
+                            par = {key: s[key] for key in vals}
+                            
+                            # get font but remove extraneous font information (extra numbers)
+                            font = s['font']
+                            # font = re.match(r'\D+(?=\d*)', s['font'])[0]
+                            
+                            # remove bolds and italics from font type                            
+                            font = font.replace('-Bold', '')
+                            font = font.replace('-BoldItalic', '')
+                            font = font.replace('-Italic', '')
+                            font = font.replace('Italic', '')
+                            
+                            par['font'] = font
+                            par['page'] = page.number +1
+                                                         
+                            # flags == 5 is a superscript, use that to undo superscripts
+                            size = s['size']
+                            
+                            flag = s['flags']
+                            
+                            if flag == 5:
+                                size += 3
+                                par['size'] = size
+                                
+                            # create unique identifier
+                            identifier = f"{size:.4f}{font}"
+                            
+                            # create styles dictionary
+                            styles[identifier] = {'size' : size, 
+                                                  'font' : font, 
+                                                  'flags': flag}
+                            
+                            # finally add paragraphs to text list
+                            texts += [par]
+                            
+                            # add counts to styles dictionary list
+                            font_counts[identifier] = font_counts.get(identifier, 0) + 1  # count the fonts usage
+                            styles[identifier]['count'] = font_counts[identifier] # add count to styles
+        
+        # check if text is almost entirely images (has not been OCR'd)
+        if len(texts) < int(imag):
+            return 'Image'
+        
+        # Re-associate text or letters between parentheses or brackets
+        assoc_txt = []
+        for i,t in enumerate(texts):
+            if t['text'].endswith('[') or t['text'].endswith('('):
+                phrase = t
+                i += 1
+                while not ']' in texts[i]['text'] or ')' in texts[i]['text']:
+                    phrase['text'] += texts[i]['text']
+                    i += 1
+                else:
+                    assoc_txt += [phrase]
             else:
-                for p in range(len(text[pag][1])):
-                    orphan +=[[text[pag][0],
-                                   text[pag][1][p][4].replace('\n', ' ').replace('- ', '')]]
+                assoc_txt += [t]
         
-        orphan += last_page # if blank it does nothing
-        
-        # retrieve abstract in case needed later
-        try:
-            abstract = [i for pg, i in orphan if i.startswith('ABSTRACT ')][0]
-        
-            if not abstract.endswith('. '):
-                ix = orphan.index([1,abstract])
-                abstract = abstract + orphan[ix+1][1]
-        except:
-            abstract = []
-        
-        # make sure the abstract is not orphaned!!
-        
-        # Remove all paragraphs that are entirely in upper case (headers)
-        orphan = [i for i in orphan if not i[1].isupper()]
-        
-        # Remove any paragraph beginning with Fig and image
-        orphan = [i for i in orphan if not i[1].startswith('Fig')]
-        orphan = [i for i in orphan if not i[1].startswith('<image')]
-        
-        # Remove any paragraph that is just affiliation or information or abstract
-        orphan = [i for i in orphan if not i[1].startswith('Grant sponsor:')]
-        orphan = [i for i in orphan if not i[1].startswith('*Correspondence')]
-        orphan = [i for i in orphan if not i[1].startswith('* Corresponding author')]
-        orphan = [i for i in orphan if not i[1].startswith('Received')]
-        orphan = [i for i in orphan if not i[1].startswith('DOI:')]
-        orphan = [i for i in orphan if not i[1].startswith('DOI ')]
-        orphan = [i for i in orphan if not i[1].startswith('TABLE')]
-        orphan = [i for i in orphan if not i[1].startswith('Keywords: ')]
-        orphan = [i for i in orphan if not i[1].startswith('KEY WORDS ')]
-        orphan = [i for i in orphan if not i[1].startswith('ABSTRACT ')]
-        orphan = [i for i in orphan if not i[1].startswith('Article history: ')]
-        orphan = [i for i in orphan if not i[1].startswith('Available online at:')]
-        orphan = [i for i in orphan if not i[1].startswith('©')]
-        orphan = [i for i in orphan if not i[1].startswith('Australian Journal of Forensic Sciences 241')]
-                
-        orphan = [i for i in orphan if not i[1].endswith(', Inc. ')]
-        
-        orphan = [i for i in orphan if not ' All rights reserved. ' in i[1]] # ending with this is also how you find the abstract in some journals
-        orphan = [i for i in orphan if not 'http://dx.doi.org/' in i[1]]
-        orphan = [i for i in orphan if not '@' in i[1]]
-        orphan = [i for i in orphan if not ' www.'  in i[1]]
-        orphan = [i for i in orphan if not ' w ww.' in i[1]]
-        
-        # Remove paragraphs that are mostly digits since they represent a table
-        for i in orphan:
-            numcount = sum(c.isdigit() for c in i[1])
-            letcount = sum(c.isalpha() for c in i[1])
-            if numcount > letcount:
-                orphan.remove(i)
-        
-        # digit followed directly by a capitalized letter is likely to be a
-        # footnote, so removing for ease
-        foot = []
-        
-        pattern = r'\d{1,2}[A-Z]'
-        for i in orphan:
-            if re.match(pattern, i[1]):
-                foot += [i]
-                orphan.remove(i)
-               
-        # find and remove duplicated paragraphs since they're usually metadata
-        # use length to reduce number of possible duplicates
-        non_dups = [orphan[0][1][:-3]] # have to do -5 to remove page numbers from duplicates
-        dups     = []
-        for ix in range(1, len(orphan)):
-            if orphan[ix][1][:-5] in non_dups:
-                dups += [ix]
-            elif orphan[ix][1] not in non_dups:
-                non_dups += [orphan[ix][1][:-5]]
-        
-        # find the first instance of the duplication in order to remove all dups
-        if dups:
-            for ix in range(len(orphan)):
-                if orphan[ix][1][:-3] == orphan[dups[0]][1][:-3] and ix not in dups:
-                    dups += [ix]
-                
-        # sort dups index list to prepare to drop the items in the orphan list
-        # reverse to avoid changing index while deleting
-        dups.sort(reverse=True)
-        
-        # go through orphan and remove by index
-        for i in dups:
-            del orphan[i]  
-        
-        # Orphaning fix
-        # create list without page numbers
-        unorphan = [i[1].strip() for i in orphan]
-        
-        # clean unorphan of empty strings
-        unorphan = [i for i in unorphan if i]
-        
-        # stop the orphaning by looking for uppercase starts and period ends
-        def end_condition(string):
-            skip = ['Dr.',
-                    'U.S.',
-                    'pp.']
-            return string[-1] == '.' and string[-3:] not in skip
-        
-        def start_condition(string):
-            return string[0].isupper()
-        
-        start_ixs = [i for i, ele in enumerate(unorphan) if start_condition(ele)]
-        #end_ixs   = [i for i, ele in enumerate(unorphan) if end_condition(ele)  ]
-        
-        start_ixs += [len(unorphan)]
-        
-        '''
-        start_list = []
-        for k, g in groupby(enumerate(start_ixs), lambda ix : ix[0] - ix[1]):
-            start_list += [list(map(itemgetter(1), g))]
-
-        end_list = []
-        for k, g in groupby(enumerate(end_ixs), lambda ix : ix[0] - ix[1]):
-            end_list += [list(map(itemgetter(1), g))]
-        
-        
-        ranges = []
-        for j in end_ixs:
-            while j not in start_ixs:
-                j -=1
-            if j in start_ixs:
-                print(j)
-                ranges += [j]
-        
-        rangelist = list(zip(ranges, end_ixs))
-        
-        missing   = []
-        for i in range(len(unorphan)):
-            if not any(i in x for x in rangelist):
-                print(i)
-        '''
-        capit_sent = list(zip(start_ixs, start_ixs[1:]))
-        
-        ps=[]
-        for i in capit_sent:
-            ps += [' '.join(unorphan[i[0]:i[1]])]
-        
-        
-        # to deal with bad OCR, anytime a word in the list below is followed
-        # by a period, the period is removed
-        ps = [i.replace(' or.', ' &') for i in ps]
-        ps = [i.replace(' et.', ' &') for i in ps]
-        
-        # Get page numbers back
-        paras = []
-        for i in ps:
-            for j in orphan:
-                if i[:30] in j[1]:
-                    paras += [[j[0], i]]
+        # drop any text that only includes integer numbers
+        text = [t for t in assoc_txt if not t['text'].strip().isdigit()]
        
-        # Remove paragraphs that are mostly digits since they represent a table
-        for i in paras:
-            numcount = sum(c.isdigit() for c in i[1])
-            letcount = sum(c.isalpha() for c in i[1])
-            if numcount > letcount:
-                paras.remove(i)
+        # combine the sizes into ranges before adding tags to improve separation
+        # doing this by making it a pandas DF and then using the counts
+        df = pd.DataFrame.from_dict(styles, orient='index').reset_index()
+        df.drop('index', axis=1, inplace=True) # remove string index same as size
+        df.sort_values('count', ascending=False, inplace=True) # sort by count
+     
+       
+        # create a dictionary to bin the font size values
+        mx = df['size'].max()
+        mn = df['size'].min()
+        md = df['size'].iloc[0]
+        
+        # select bin size in points
+        binsize = 1.5
+        
+        # ensure bin sizes are inclusive
+        lobin = math.ceil(md-mn-(binsize/2))
+        hibin = math.ceil(mx-md-(binsize/2))
+        
+        bins = {} # start bin dictionary
+        
+        bins['<p>'] = [md - (binsize/2), md + (binsize/2)] # select bin that will be standard
+        
+        hibin_strt = md + (binsize/2)
+        lobin_strt = md - (binsize/2)
+        
+        idx = 0
+        for b in range(hibin):
+            idx += 1
+            bins[f'<h{idx}>'] = [hibin_strt, hibin_strt + binsize]
+            hibin_strt += binsize
+            
+        idx = 0
+        for b in range(lobin):
+            idx += 1
+            bins[f'<s{idx}>'] = [lobin_strt - binsize, lobin_strt]
+            lobin_strt -= binsize
                 
-        # Do twice just in case
-        for i in paras:
-            numcount = sum(c.isdigit() for c in i[1])
-            letcount = sum(c.isalpha() for c in i[1])
-            if numcount > letcount:
-                paras.remove(i)      
+        keys = list(bins)
+            
+        # Make sure bins correspond with font types and the tags are properly labeled
+        tags = {}
+    
+        for key in keys:
+            fonts = df[df['size'].between(bins[key][0], bins[key][1])]['font'].unique()
+            if len(fonts) > 1:
+                for n in range(len(fonts)):
+                    new_tag = key[:-1] + f'_{n+1}' + key[-1:]
+                    tags[new_tag] = bins[key] + [fonts[n]]
+            elif len(fonts) == 1:
+                tags[key] = bins[key] + [fonts[0]]            
+            
+            # iterate over text list of dicts and add tags as value in dict
+            for i in text:
+                for tag in tags:
+                    if tags[tag][0]<= i['size']< tags[tag][1] and tags[tag][2] == i['font']:
+                        i['tag'] = tag
+    
+        # remove all extraneous info
+        info = ['page', 'tag', 'text']
+        txt  = []
+        for i in text:
+            txt += [{key : i[key] for key in info}]   
         
-        # delete all double spaces in each paragraph
-        paras = [[i[0], i[1].replace('  ', ' ')] for i in paras]
+        # strip additional spaces after text blocks if they exist
+        for i in txt:
+            i['text'] = i['text'].rstrip()
+    
+        # find references section and separate from text
+        ref_lim = -1
+        for i in range(len(txt)):
+            if txt[i]['text'].casefold() == 'references':
+                ref_lim = i
+            elif txt[i]['text'].casefold() == 'literature cited':
+                ref_lim = i
+            elif txt[i]['text'].casefold() == 'literature c1 ted':
+                ref_lim = i
+            elif txt[i]['text'].casefold() == 'acknowledgment':
+                ref_lim = i
+            elif txt[i]['text'].casefold() == 'acknowledgments':  
+                ref_lim = i
+                
+                
+        works_cited = txt[ref_lim:]
+        text        = txt[:ref_lim]
+       
+        # Change all emdashes into actual dashes
+        for i in range(len(works_cited)-1):
+            if works_cited[i]['text'] == 'e':
+                add = '-' + works_cited[i+1]['text']
+                works_cited[i-1]['text'] += add
+                works_cited[i]['text']    = '' # remove the dash character
+                works_cited[i+1]['text']  = '' # remove the number after unorphaning
+            elif txt[i]['text'] == 'd':
+                add = ' - ' + txt[i+1]['text']
+                txt[i-1]['text'] += add
+                txt[i]['text']    = '' # remove the dash character
+                txt[i+1]['text']  = ''
         
-        # Add space between all digits and words (if none there)
-        # This avoids superscript issues
-        pattern = r'(?<=[a-z])()(?=\d)' #lookahead and lookbehind
-        paras = [[i[0], re.sub(pattern, ' ', i[1])] for i in paras]                
-               
-        # Now to work on references
-        # Split into individual references using REGEX
-        references = []
+        # clean all the newly empty spaces in works_cited
+        works_cited = [i for i in works_cited if i['text']]
+        
+        # fix all references that are split mid-word
         for i in works_cited:
-            references += re.split(r'\n(?=[\[|\d|\(])', i)
+            i['text'] = i['text'].strip('-')
+    
+        # don't sort references because italics are sometimes set as different font
+        # May be the same for text!!!!
         
-        # Replace line break characters for each citation
-        for ix in range(len(references)):
-            references[ix] = references[ix].replace('\n', ' ').replace('- ', '')
+        # select only the text for the references info
+        references = ''
         
-        # 
-        references_fixed = []
-        for ix in range(len(references)-2):
-            pattern1 = r'\d{1,2}[^\.\]]'
-            if re.match(pattern1, references[ix+1]):
-                references_fixed += [' '.join(references[ix:ix+2])]
-                ix += 2
-            elif re.match(pattern1, references[ix]):
-                pass
-            else:
-                references_fixed += [references[ix]]
+        for i in works_cited:
+            references += i['text'] + '\n'
         
-        # unorphan references
+        brack = r'\[\d{,2}\]|'
+        paren = r'\(\d{,2}\)|'
+        naked = r'\d{,2}\.[ ][A-Z]'
+        
+        pattern = r'\n(?=' + brack + paren + naked + ')'
+        
+        references = re.split(pattern, references)
+        
+        references = references[1:] # remove the heading from the list
+        
+        # clean up spaces before closing parentheses, brackets, commas, and double spaces
         cites = []
-        for ix in range(len(references)):
-            pattern = r'^(\[|\d|\()\d{,2}(?=\]|\)|\.)'
-            mtch    = re.match(pattern, references[ix])
-            try:
-                nxtmtch = re.match(pattern, references[ix+1])
-            except:
-                cites += [references[ix]]
-            if mtch and nxtmtch:
-                cites += [references[ix]]
-            elif mtch and not nxtmtch:
-                cites += [references[ix] + ' ' + references[ix+1]]
-             
-        # Separate the reading portion from the finding matches portion in order to create a "find keyword" function
+        for r in references:
+            c = r.replace('\n', ' ')
+            c = c.replace(' )', ')')
+            c = c.replace(' ]', ']')
+            c = c.replace(' ,', ',')
+            c = c.replace('  ', ' ')
+            c = c.replace(' – ', '-')
+            c = c.replace(' .', '.')
+            # clean up number ranges whose dashes have been removed
+            c = re.sub(r'(?<=\d)\s(?=\d)', '-', c)
+            # clean up fi and ff when separated from word
+            c = c.replace(' fi ', 'fi')
+            c = c.replace(' ff ', 'ff')
+            cites += [c]
+       
+        # Now clean up cites if it's separating at issue number (#)
+        posslst  = ('(', '[')
+        moved    = []
+        i=0
+        while i < len(cites)-1:
+            if not cites[i][0].isdigit():
+                if cites[i][0] != cites[i+1][0] and cites[i].startswith(posslst):
+                    cites[i] += cites[i+1]
+                    i+=1
+                    moved += [i]
+                else:
+                    i += 1
+            else:
+                i += 1
+       
+        strts = []
+        for i in cites:
+            strts += i[0]
+            
+        count1 = strts.count('[')
+        count2 = strts.count('(')
         
-        # find out if pdf has numbered citations or in-text citations
+        check = ''
+        
+        if count1 > count2:
+            check += '['
+        elif count1 < count2:
+            check += '('
+        
+        if check in posslst:
+            indices = [index for index, element in enumerate(strts) if element == check]
+        else:
+            indices = [index for index, element in enumerate(strts)]
+    
+        cites = [cites[ix] for ix in indices]
+    
+        # Fixing text now
+        # fix when only a 'd' appears (it's a dash) and strip dashes at midword 
+        # breaks and add a space after each blcok if not splitting word
+        for i in range(len(text)-1):
+            if text[i]['text'] == 'e':
+                add = '-' + text[i+1]['text']
+                text[i-1]['text'] += add
+                text[i]['text']    = '' # remove the dash character
+                text[i+1]['text']  = ''
+            elif text[i]['text'] == 'd':
+                add = ' - ' + text[i+1]['text']
+                text[i-1]['text'] += add
+                text[i]['text']    = '' # remove the dash character
+                text[i+1]['text']  = ''
+        
+       
+        # clean up headings that may have been picked up as paragraph (all caps)
+        txt = [i for i in text if not i['text'].isupper()]
+        
+        # clean up all the newly blank text spaces
+        txt = [i for i in txt if i['text']]
+        
+        # clean up text if period at end of text is preceded by not a word
+        pattern = r'\s[a-z]\.'
+        for i in txt:
+            i['text'] = re.sub(r'(?<=\s[a-z])(\.)', '', i['text'])
+            
+        # skip if any of the given words are found at end so period is not caught
+        skip = ['Dr.', 'U.S.', 'pp.', 'et al.', 'e.g.']
+        for i in txt:
+            if i['text'].endswith(tuple(skip)):
+                i['text'] += ' '
+        
+        # sorting even if possibly losing some italicized information. Fix later by fixing font tags           
+        # instead go by sentences since sentences are most important and paragraphs can be sectioned
+        txt_sort = sorted(txt, key = lambda x: x['tag'])
+        
+        # get dictionary of indices for each tag type in sorted text list
+        keys = sorted(set([entry['tag'] for entry in txt_sort]))
+        
+        tagints = {key: None for key in keys} # dict of tag intervals
+        
+        i = 0
+        while i < (len(txt_sort)-1):
+            k = i
+            while i <= k < (len(txt_sort)-1):
+                if txt_sort[k]['tag'] != txt_sort[k+1]['tag']:
+                    tagints[txt_sort[k]['tag']] = [i, k+1]
+                    k += 1
+                    break
+                else:
+                    k += 1
+            i = k
+        
+        # add the interval for the last key
+        last_key = list(tagints.keys())[-1]
+        last_val = tagints[list(tagints.keys())[-2]][1]
+        
+        tagints[last_key] = [last_val, len(txt_sort)]  
+            
+        # clean tagints if some intervals are None
+        # This happens from changing e and d to dashes
+        ints = {k: v for k, v in tagints.items() if v is not None}
+        
+        # Find the interval for each paragraph by index and whithin tag intervals
+        idx   = {key: None for key in sorted(ints.keys())}
+        
+        paras = []
+        
+        for key in ints:
+            i = ints[key][0]
+            while i < ints[key][1]:
+                # if not complete sentence, find next block ending in a period
+                add = [txt_sort[i]['page']]
+                par = ''
+                k = i
+                while i <= k < ints[key][1]:
+                    if txt_sort[k]['text'].endswith('.'):
+                        par   += txt_sort[k]['text']
+                        add   += [par]
+                        paras += [add]
+                        break
+                    elif txt_sort[k]['text'].endswith('(') or txt_sort[k]['text'].endswith('['): # don't add space after parenthesis
+                        par += txt_sort[k]['text']
+                        k += 1
+                    elif txt_sort[k]['text'].endswith('-'):
+                        par += txt_sort[k]['text'].rstrip('-')
+                        k += 1
+                    else:
+                        par += txt_sort[k]['text'] + ' '
+                        k += 1
+                i = k+1   
+        
+        # clean up spaces before closing parentheses, brackets, commas, and double spaces
+        for p in paras:
+                p[1] = p[1].replace(' )', ')')
+                p[1] = p[1].replace(' ]', ']')
+                p[1] = p[1].replace(' ,', ',')
+                p[1] = p[1].replace('  ', ' ')
+                p[1] = p[1].replace('–', '-')
+                p[1] = p[1].replace('- ', '-')
+                p[1] = p[1].replace(' -', '-')
+                p[1] = p[1].replace(' – ', '-')
+                # clean up number ranges whose dashes have been removed
+                p[1] = re.sub(r'(?<=\d)\s(?=\d)', '-', p[1])
+                # clean up fi and ff when separated from word
+                p[1] = p[1].replace(' fi ', 'fi')
+                p[1] = p[1].replace(' ff ', 'ff')
+        
+        return paras, cites
+
+    def find_citations(self, paras, cites):
+        ref = self.ref
+        
+        # separate authors and years
+        auth = ref[:-1]
+        year = ref[-1:][0]
+        
+        # Count how many authors and create patterns for citations as expected
+        if len(auth) == 1:
+            authpat  = f'{auth[0]}'
+        elif len(auth) == 2:
+            authpat  = [f'{auth[0]} and {auth[1]}']
+            authpat += [f'{auth[0]} & {auth[1]}']
+        elif len(auth) > 2:
+            authpat  = [f'{auth[0]} et al.']
+            if len(auth) <= 5:
+                authpat += [', '.join(auth[:-1]) + f' and {auth[-1]}']
+                authpat += [', '.join(auth[:-1]) + f', and {auth[-1]}']
+                authpat += [', '.join(auth[:-1]) + f' & {auth[-1]}']
+           
+        # Find paragraphs that have the authors cited (not years yet)
+        cite = []
+        for pat in authpat:
+            cite += [p for p in paras if pat in p[1]]
+        
+        # now check if the correct year is cited in those paragraphs
+        yrpat = [year, f"'{year[-2:]}", f"’{year[-2:]}"]
+        
+        match = []
+        for yr in yrpat:
+            match += [c for c in cite if yr in c[1]]
+        
+        # do again per sentence in each paragraph to extract sentence
+        skip = ['Dr.', 'U.S.', 'pp.', 'et al.']
+        
+        sentences = []
+        for m in match:
+            regexskip = [rf"(?<!\b{s.strip('.')}\b)" for s in skip]
+            pattern  = ''.join(regexskip) + '(?<!\s\w)\.'
+            parag    = re.split(pattern, m[1])
+            authsent = []
+            yrsent   = []
+            for pat in authpat:
+                authsent += [s for s in parag if pat in s]
+            for yr in yrpat:
+                yrsent   += [snt for snt in authsent if yr in snt]
+            sentences += yrsent
+            
+        sentences = [snt.strip() for snt in sentences]
+        
+        # find out if pdf has numbered citations
         # function that finds location of reference authors and year and gets ref number
-        def ref_num(paragraph, ref):
-            year         = ref[-1]
+        def ref_num(paragraph, auth, year):
             foo = r''    # start regex expression for ref number
-            for i in ref[:-1]:
+            for i in auth:
                 foo += '(?:%s)\D+' % i # add all authors to regex exp 
             foo += '.*' + f'(?:{year}).+[^\[\d]'     # add year at the end of the regex expression
             found = re.search(foo, paragraph, re.IGNORECASE)    # find starting location
@@ -397,95 +523,36 @@ class pdf_scraper(object):
                 ref_num = re.findall(r'\d{1,2}', r_num.group())[0]
             else:
                 ref_num = ''
-            return ref_num, ', '.join(ref)
+            return ref_num, ', '.join(auth) + f', {year}'
             
         # use func to find the ref_num if numbered references present
-        try:
-            cite_nums = []
-            num_refs  = []
+        if cites:
             for c in deepcopy(cites):
-                for ref in self.reflist:
-                    cite_num, cite = ref_num(c, ref)
-                    if cite_num:
-                        cite_nums += [cite_num]
-                        num_refs  += [[cite_num, cite]]
-        except:
-            cite_nums = []
-            num_refs  = []
+                cite_num, cite = ref_num(c, auth, year)
+                if cite_num:
+                    num_ref  = [cite_num, cite]
+                    break
+                else:
+                    cite_num = ''
+                    num_ref  = []
+        elif not cites:
+            cite_num = ''
+            num_ref  = []
         
-        self.num_refs = num_refs
-
-        # use regex to find where number ranges between brackets may include cite nums
+        # use regex to find where number ranges between brackets may include cite num
         range_cite = []
         try:
             for paragraph in paras:
-                for num in cite_nums:
-                    pattern    = r'[\[|\(|,|\w|\s](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
-                    posranges  = re.findall(pattern, paragraph[1])
-                    for dash in posranges:
-                        rango     = re.split(r'-|–', dash)
-                        if int(rango[0]) <= int(num) <= int(rango[1]):
-                            range_cite += [f'{dash}']
+                pattern    = r'[\[|\(|,|\w|\s](\d{,2}[-|–]\s*\d{,2})[\]|\)|,)]' # either long or short dash
+                posranges  = re.findall(pattern, paragraph[1])
+                for dash in posranges:
+                    rango     = re.split(r'-|–', dash)
+                    if int(rango[0]) <= int(cite_num) <= int(rango[1]):
+                        range_cite += [f'{dash}']
         except ValueError:
             range_cite = []
         
-        self.range_cite = range_cite                
-        self.cite_nums = cite_nums
-        
- 
-
-        '''
-        Make list of just text
-        use first few words of paragraph to find which page the paragrpah starts in
-        use few words preceding citations (once found) to check if paragraph pg number different from citation
-        if so, print notye that citation in following page
-        '''
-
-        return paras
-            
-    def find_citations(self, paras):
-
-        # defining regex function to find sentences with in-text citations
-        def intext_match(paragraph, ref):
-            pattern = rf'({ref[0]}[^A-Za-z]+{ref[1]})'
-            citations = re.findall(pattern, paragraph[1])
-            sentences = []
-            temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
-            for s in temp_i:
-                for cite in set(citations):
-                    if s.find(cite) != -1:
-                        sentences += [s]
-            return sentences
-        
-        # Function to find old citations as '52 instead of 1952
-        def old_intext_match(paragraph, ref):
-            yr      = ref[1][2:]
-            pattern = rf"({ref[0]}[^A-Za-z]+[\'|\’]{yr})"
-            citations = re.findall(pattern, paragraph[1])
-            sentences = []
-            temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
-            for s in temp_i:
-                for cite in set(citations):
-                    if s.find(cite) != -1:
-                        sentences += [s]
-            return sentences
-        
-        # Create alternative function that will find citations even if authors
-        # year is misread by system
-        def alt_intext_match(paragraph, ref):
-            auth    = f'({ref[0]}'
-            pattern = auth + r"[^A-Za-z]+\([\W|^\d{4}]\))"
-            citations = re.findall(pattern, paragraph[1])
-            sentences = []
-            temp_i = re.split(r'\.\s(?=[A-Z])', paragraph[1])
-            for s in temp_i:
-                for cite in set(citations):
-                    if s.find(cite) != -1:
-                        sentences += [s]
-            return sentences
-        
         # defining regex function to find sentences with numbered citations
-        # def numbered_citations(paragraph, refnum):
         def num_match(paragraph, refnum):
             pattern = r'[\[|\(|,|\s]' + refnum + '[\]|\)|,)](?!\d{3})'
             sentences = []
@@ -503,53 +570,22 @@ class pdf_scraper(object):
             for s in temp_i:
                 if re.search(pattern, s):
                     sentences += [s]
-            return sentences
-        
-        # Get sentences in which the match occurred for in-text citations
-        try:
-            sentences = []
-            for ref in self.intext_refs:
-                for paragraph in paras:
-                    sentences += intext_match(paragraph, ref)
-        except:
-            pass
-        
-        if not sentences:
-            try:
-                for ref in self.intext_refs:
-                    for paragraph in paras:
-                        sentences += old_intext_match(paragraph, ref)
-            except:
-                pass
-        
-        try:
-           for ref in self.intext_refs:
-                for paragraph in paras:
-                    sentences += alt_intext_match(paragraph, ref)
-        except:
-            pass
-        
-        # clean up if cite_nums from poor reading of references for output
-        if sentences and self.cite_nums:
-            self.cite_nums = []
-            self.num_refs  = []
+            return sentences    
         
         # Get sentences if citations are numbered or have a range
-        if self.cite_nums and not sentences:
-            sentences = []
-            for ref in self.cite_nums:
-                for paragraph in paras:
-                    sentences += num_match(paragraph, ref)
+        if cite_num:
+            for paragraph in paras:
+                sentences += num_match(paragraph, cite_num)
                     
-        if self.range_cite:
-            for ref in self.range_cite:
+        if range_cite:
+            for r in range_cite:
                 for paragraph in paras:
-                    sentences += range_match(paragraph, ref)
+                    sentences += range_match(paragraph, r)
         
         # remove any duplication of sentences
-        ref_sentences = list(set(sentences))        
-
-        return ref_sentences
+        ref_sentences = list(set(sentences))
+        
+        return ref_sentences, num_ref
     
     def find_keywords(self, paras):
         
@@ -575,13 +611,15 @@ class pdf_scraper(object):
         return kw_sentences
 
     def find_match(self):
+        together        = self.together
+        paras, cites    = self.text_extract()
         
-        together = self.together
-        paras    = self.read_pdf()
-
+        if paras == 'Image':
+            return 'Image', 'Image', 'Image'
+        
         # check if either refs or keywords are empty
         if not self.empty_ref:
-            ref_sentences = self.find_citations(paras)
+            ref_sentences, num_ref = self.find_citations(paras, cites)
         else:
             ref_sentences = []
 
@@ -605,23 +643,38 @@ class pdf_scraper(object):
         # Sort matches by page number
         match = sorted(match, key=lambda x: x[0])
         
-        return match, sentences, self.num_refs
+        return match, sentences, num_ref
     
     def return_match(self):
-    
-        match, sentences, num_refs = self.find_match()
+        ref = self.ref
         
         st.title(self.file.name.strip('.pdf'))
-        st.title('Finding: ' + str(self.refs))
+        st.markdown('*Finding: *' + ', '.join(ref))
         
-        # Add note to 
-        if num_refs:
+        # catch if reading errors cause breakdown so whole app doesn't break
+        try:
+            match, sentences, num_ref = self.find_match()
+        except Exception:
+            st.markdown('_PDF text could not be read_')
+            print(traceback.format_exc())
+            return
+        
+        # show text if the sentences are returned empty
+        if not sentences:
+            st.markdown('_PDF text could not be read_')
+            return
+        
+        # this will happen if the text was loaded as an image not OCR'd
+        if match == 'Image':
+            st.markdown('_PDF was loaded as an image without character recognition_')
+            return
+               
+        # Add note for numbered references
+        if num_ref:
             st.markdown('**References numbered in this text as:**')
-            for cite in num_refs:
-                st.markdown(f'**_{cite[0]} -> {cite[1]}_**')
+            st.markdown(f'**_{num_ref[0]} -> {num_ref[1]}_**')
         
         # Separating by sentence to rejoin as output
-        
         for i in match:
             output = []
             st.markdown('**Page %s**' % i[0])
@@ -636,19 +689,16 @@ class pdf_scraper(object):
 
 #-----------------------------------------------------------------------------      
 class word_cloud():
-    def __init__(self, files, refs, keywords, together):
+    def __init__(self, files, ref, keywords, together):
         self.files = files
-        self.refs  = refs
+        self.ref   = ref
         self.keywords = keywords
         self.together = together
         
-        ignore = ['et', 'al', ]
+        ignore = ['et', 'al']
         
-        cites = refs.split('|') # split for multiple references
-        auths = [c.split(';')[0] for c in cites] # remove year
-        
-        auths = [a.split(' and ')[:] for a in auths]
-        auths = [name for sublist in auths for name in sublist] # flatten list
+        # separate authors and years
+        auths = ref[:-1]
         
         keywds = keywords.split(',')
         keywds = [k.strip() for k in keywds]
@@ -656,8 +706,8 @@ class word_cloud():
         self.stpwds = auths + keywds + ignore
                 
     def run(self):
-        files = self.files
-        refs  = self.refs
+        files    = self.files
+        ref      = self.ref
         keywords = self.keywords
         together = self.together
         
@@ -666,17 +716,29 @@ class word_cloud():
         
         words  = []
         fnames = []
+        errors = []
         
         for file in files:
-            match, sentences, num_refs = pdf_scraper(file,
-                                                     refs,
-                                                     keywords,
-                                                     together=together).find_match()
+            try:
+                match, sentences, num_refs = pdf_scraper(file,
+                                                         ref,
+                                                         keywords,
+                                                         together=together).find_match()
             
-            fnames += [[sentences, file.name]]
+                fnames += [[sentences, file.name]]
             
-            words += sentences
+                words += sentences
             
+            except Exception:
+                print(traceback.format_exc())
+                errors += [file.name]
+            
+        # check to make sure you have at least one sentence to be wordclouded
+        if not words:
+            st.markdown('**All files encountered errors in text extraction and/or citation matching**')
+            print(traceback.format_exc())
+            return '', ''
+        
         # Compile the words into a single paragraph to word cloud
         text = ' '.join(words)
         
@@ -705,6 +767,11 @@ class word_cloud():
         ax.axis("off")
         st.pyplot(fig)
         
+        # Print a list of the files that had issues in the word cloud generator
+        st.title('Files that could not be read by Word Cloud generator')
+        for f in errors:
+            st.markdown(f)
+        
         return count_df, sent_df
             
 #-----------------------------------------------------------------------------
@@ -728,7 +795,6 @@ def download_csv(dataframe, filename, display_text, index=True):
     linko= f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">{display_text}</a>'
     st.markdown(linko, unsafe_allow_html=True)
 
-
 #-----------------------------------------------------------------------------
 hover_text   = 'Click Run to start the scraping'
 report_hover = 'Click to export PDF report'
@@ -740,16 +806,20 @@ if refs or keywords and uploaded_files:
     wc     = st.button('WordCloud')
     # report = st.button('Export Report', help=report_hover)
     if run:
-        for uploaded_file in uploaded_files: 
-            pdf_scraper(uploaded_file, refs, keywords, together=simult).return_match()
+        for uploaded_file in uploaded_files:
+            for ref in reflist:
+                pdf_scraper(uploaded_file, ref, keywords, together=simult).return_match()
     if wc:
-        counts, sent = word_cloud(uploaded_files, refs, keywords, together=simult).run()
+        counts, sent = word_cloud(uploaded_files, ref, keywords, together=simult).run()
         fname = refs.replace(' ', '').replace(';', '').replace('|', '')
-        download_csv(counts, fname +'_Counts', 
-                         'Download CSV of Counts')
-        download_csv(sent, fname + '_Sentences', 
-                         'Download CSV of Sentences', 
-                             index=False)
+        if not counts.empty:
+            st.title('Download CSV output files')
+            download_csv(counts, fname +'_Counts', 
+                             'Download CSV of Counts')
+        if not sent.empty:
+            download_csv(sent, fname + '_Sentences', 
+                             'Download CSV of Sentences', 
+                                 index=False)
 
 
 
