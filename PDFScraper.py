@@ -32,9 +32,7 @@ uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf
 
 # direct = 'D:\\Users\\Armando\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
 
-# file = open(direct + 'Gualdi-Russo-et-al_2018.pdf', 'rb')
-
-# Auerhbach and Ruff 2010
+# file = open(direct + 'Sawchuck-et-al_2019.pdf', 'rb')
 
 # refs     = 'Trotter and Gleser;1952'
 
@@ -156,15 +154,15 @@ class pdf_scraper(object):
         assoc_txt = []
         for i,t in enumerate(texts):
             if t['text'].endswith('[') or t['text'].endswith('('):
-                phrase = t
+                phrase = deepcopy(t)
                 i += 1
-                while not ']' in texts[i]['text'] or ')' in texts[i]['text']:
-                    phrase['text'] += texts[i]['text']
+                while not any(']' or ')' in texts[i]['text']):
+                    phrase['text'] += deepcopy(texts[i]['text'])
                     i += 1
                 else:
                     assoc_txt += [phrase]
             else:
-                assoc_txt += [t]
+                assoc_txt += [deepcopy(t)]
         
         # drop any text that only includes integer numbers
         text = [t for t in assoc_txt if not t['text'].strip().isdigit()]
@@ -674,7 +672,8 @@ class pdf_scraper(object):
             st.markdown('**References numbered in this text as:**')
             st.markdown(f'**_{num_ref[0]} -> {num_ref[1]}_**')
         
-        # Separating by sentence to rejoin as output
+        '''
+        # Separating by sentence in paragraphs to rejoin as output
         for i in match:
             output = []
             st.markdown('**Page %s**' % i[0])
@@ -686,6 +685,10 @@ class pdf_scraper(object):
                 else:
                     output   += [s +'.']
             st.markdown(' '.join(output).replace('..', '.')) # Flatten ouput list and output
+        '''
+        # only print sentences and forget about whole paragraph for now, can be fixed later
+        for s in sentences:
+            st.markdown(f'**{s}.**')
 
 #-----------------------------------------------------------------------------      
 class word_cloud():
@@ -732,7 +735,9 @@ class word_cloud():
             except Exception:
                 print(traceback.format_exc())
                 errors += [file.name]
-            
+        
+        st.markdown(words)
+        
         # check to make sure you have at least one sentence to be wordclouded
         if not words:
             st.markdown('**All files encountered errors in text extraction and/or citation matching**')
