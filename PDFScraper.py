@@ -30,7 +30,7 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
 
-# direct = 'D:\\Users\\Armando\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
+# direct = 'C:\\Users\\arman\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
 
 # file = open(direct + 'Sawchuck-et-al_2019.pdf', 'rb')
 
@@ -62,7 +62,7 @@ for i in range(len(auth_list)):
 ref = reflist[0]       
 
 # Define the class and associated functions
-class pdf_scraper(object):
+class pdf_scraper():
     def __init__(self, file, ref, keywords, together):
         self.file     = file
         self.ref      = ref
