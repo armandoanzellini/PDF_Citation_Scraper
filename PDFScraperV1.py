@@ -11,6 +11,7 @@ is found.
 """
 import re
 import math
+import fitz
 import base64
 import traceback
 import pandas as pd
@@ -18,9 +19,6 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from wordcloud import WordCloud, STOPWORDS
-import PyPDF2
-import pytesseract
-from pdf2image import convert_from_path
 
 st.title('PDF Citation Scraper')
 
@@ -92,47 +90,150 @@ class pdf_scraper():
         
         file = self.file
     
-        with open(file, 'rb') as file:
-            pdf_reader = PyPDF2.PdfFileReader(file)
-            num_pages = pdf_reader.numPages
+        doc = fitz.open(stream=file.read(), filetype = "pdf") # opening BytesIO stream
         
-            lines = []
-            # Iterate through each page of the PDF
-            for page_num in range(num_pages):
-                # Convert the page to an image
-                images = convert_from_path(file, dpi=300, first_page=page_num+1, last_page=page_num+1)
-            
-                # Perform OCR on each image
-                ocr_text = pytesseract.image_to_string(images[0])
-            
-                # Process the OCR text
-                ocr_lines = re.split(r'([A-Z].*?\.)', ocr_text)
+        styles = {}
+        font_counts = {}
+        texts = []
+        vals = ['size', 'flags', 'text']
+        imag = 0
         
-                # Filter out lines that represent tables or graphs
-                filtered_lines = [line for line in ocr_lines if not all(char.isnumeric() for char in line)]
-            
-                # Add the filtered lines to the main lines list
-                lines += filtered_lines
+        for page in doc:
+            blocks = page.getText("dict")["blocks"]
+            for b in blocks:  # iterate through the text blocks
+                if b['type'] == 1:
+                    imag += 1
+                if b['type'] == 0:  # block contains text
+                    for l in b["lines"]:  # iterate through the text lines
+                        for s in l["spans"]:  # iterate through the text spans
+                            # text in blocks
+                            par = {key: s[key] for key in vals}
+                            
+                            # get font but remove extraneous font information (extra numbers)
+                            font = s['font']
+                            # font = re.match(r'\D+(?=\d*)', s['font'])[0]
+                            
+                            # remove bolds and italics from font type                            
+                            font = font.replace('-Bold', '')
+                            font = font.replace('-BoldItalic', '')
+                            font = font.replace('-Italic', '')
+                            font = font.replace('Italic', '')
+                            
+                            par['font'] = font
+                            par['page'] = page.number +1
+                                                         
+                            # flags == 5 is a superscript, use that to undo superscripts
+                            size = s['size']
+                            
+                            flag = s['flags']
+                            
+                            if flag == 5:
+                                size += 3
+                                par['size'] = size
+                                
+                            # create unique identifier
+                            identifier = f"{size:.4f}{font}"
+                            
+                            # create styles dictionary
+                            styles[identifier] = {'size' : size, 
+                                                  'font' : font, 
+                                                  'flags': flag}
+                            
+                            # finally add paragraphs to text list
+                            texts += [par]
+                            
+                            # add counts to styles dictionary list
+                            font_counts[identifier] = font_counts.get(identifier, 0) + 1  # count the fonts usage
+                            styles[identifier]['count'] = font_counts[identifier] # add count to styles
         
-        seen = set()
-        lines = [line for line in lines if not (line in seen or seen.add(line))]
-        lines = [re.sub(r'-\n', '', line) for line in lines]
-        lines = [re.sub(r'\n', ' ', line) for line in lines]
-        lines = [line.strip() for line in lines]
+        # check if text is almost entirely images (has not been OCR'd)
+        if len(texts) < int(imag):
+            return 'Image'
         
-        txt = []
-        current_sentence = ""
-        
-        for line in lines:
-            line = line.strip()  # Remove leading/trailing whitespace
-        
-            if not line.endswith('.'):
-                current_sentence +=  line
+        # Re-associate text or letters between parentheses or brackets
+        assoc_txt = []
+        for i,t in enumerate(texts):
+            if t['text'].endswith('[') or t['text'].endswith('('):
+                phrase = deepcopy(t)
+                i += 1
+                while not any(']' or ')' in texts[i]['text']):
+                    phrase['text'] += deepcopy(texts[i]['text'])
+                    i += 1
+                else:
+                    assoc_txt += [phrase]
             else:
-                current_sentence +=  line
-                txt.append(current_sentence)
-                current_sentence = ""
+                assoc_txt += [deepcopy(t)]
+        
+        # drop any text that only includes integer numbers
+        text = [t for t in assoc_txt if not t['text'].strip().isdigit()]
+       
+        # combine the sizes into ranges before adding tags to improve separation
+        # doing this by making it a pandas DF and then using the counts
+        df = pd.DataFrame.from_dict(styles, orient='index').reset_index()
+        df.drop('index', axis=1, inplace=True) # remove string index same as size
+        df.sort_values('count', ascending=False, inplace=True) # sort by count
+     
+       
+        # create a dictionary to bin the font size values
+        mx = df['size'].max()
+        mn = df['size'].min()
+        md = df['size'].iloc[0]
+        
+        # select bin size in points
+        binsize = 1.5
+        
+        # ensure bin sizes are inclusive
+        lobin = math.ceil(md-mn-(binsize/2))
+        hibin = math.ceil(mx-md-(binsize/2))
+        
+        bins = {} # start bin dictionary
+        
+        bins['<p>'] = [md - (binsize/2), md + (binsize/2)] # select bin that will be standard
+        
+        hibin_strt = md + (binsize/2)
+        lobin_strt = md - (binsize/2)
+        
+        idx = 0
+        for b in range(hibin):
+            idx += 1
+            bins[f'<h{idx}>'] = [hibin_strt, hibin_strt + binsize]
+            hibin_strt += binsize
+            
+        idx = 0
+        for b in range(lobin):
+            idx += 1
+            bins[f'<s{idx}>'] = [lobin_strt - binsize, lobin_strt]
+            lobin_strt -= binsize
                 
+        keys = list(bins)
+            
+        # Make sure bins correspond with font types and the tags are properly labeled
+        tags = {}
+    
+        for key in keys:
+            fonts = df[df['size'].between(bins[key][0], bins[key][1])]['font'].unique()
+            if len(fonts) > 1:
+                for n in range(len(fonts)):
+                    new_tag = key[:-1] + f'_{n+1}' + key[-1:]
+                    tags[new_tag] = bins[key] + [fonts[n]]
+            elif len(fonts) == 1:
+                tags[key] = bins[key] + [fonts[0]]            
+            
+            # iterate over text list of dicts and add tags as value in dict
+            for i in text:
+                for tag in tags:
+                    if tags[tag][0]<= i['size']< tags[tag][1] and tags[tag][2] == i['font']:
+                        i['tag'] = tag
+    
+        # remove all extraneous info
+        info = ['page', 'tag', 'text']
+        txt  = []
+        for i in text:
+            txt += [{key : i[key] for key in info}]   
+        
+        # strip additional spaces after text blocks if they exist
+        for i in txt:
+            i['text'] = i['text'].rstrip()
     
         # find references section and separate from text
         ref_lim = -1
