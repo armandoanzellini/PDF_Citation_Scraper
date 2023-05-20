@@ -7,7 +7,8 @@ Created on Thu May 18 17:16:37 2023
 import PyPDF2
 import re
 import pytesseract
-from pdf2image import convert_from_path
+from pdf2image import convert_from_bytes
+from io import BytesIO
 
 pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
@@ -24,7 +25,7 @@ with open(pdf_path, 'rb') as file:
     # Iterate through each page of the PDF
     for page_num in range(num_pages):
         # Convert the page to an image
-        images = convert_from_path(pdf_path, dpi=300, first_page=page_num+1, last_page=page_num+1)
+        images = convert_from_bytes(file.read(), dpi=300, first_page=page_num+1, last_page=page_num+1)
     
         # Perform OCR on each image
         ocr_text = pytesseract.image_to_string(images[0])

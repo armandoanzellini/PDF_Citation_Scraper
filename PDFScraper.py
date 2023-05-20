@@ -20,7 +20,7 @@ from copy import deepcopy
 from wordcloud import WordCloud, STOPWORDS
 import PyPDF2
 import pytesseract
-from pdf2image import convert_from_path
+from pdf2image import convert_from_bytes, convert_from_path
 
 st.title('PDF Citation Scraper')
 
@@ -92,8 +92,8 @@ class pdf_scraper():
         
         file = self.file
     
-        with open(file, 'rb') as file:
-            pdf_reader = PyPDF2.PdfFileReader(file)
+        with open(file, 'rb') as pdf:
+            pdf_reader = PyPDF2.PdfFileReader(pdf)
             num_pages = pdf_reader.numPages
         
             lines = []
@@ -105,7 +105,7 @@ class pdf_scraper():
                 # Perform OCR on each image
                 ocr_text = pytesseract.image_to_string(images[0])
             
-                # Process the OCR text
+                # Process the OCR tex t
                 ocr_lines = re.split(r'([A-Z].*?\.)', ocr_text)
         
                 # Filter out lines that represent tables or graphs
@@ -559,6 +559,7 @@ class pdf_scraper():
         # show text if the sentences are returned empty
         if not sentences:
             st.markdown('_PDF text could not be read_')
+            print(traceback.format_exc())
             return
         
         # this will happen if the text was loaded as an image not OCR'd
