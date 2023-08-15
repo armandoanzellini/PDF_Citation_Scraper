@@ -2,22 +2,23 @@
 """
 Created on Thu May 18 17:16:37 2023
 
-@author: Armando
+@author: Armando Anzellini
 """
 import PyPDF2
 import re
 import pytesseract
-from pdf2image import convert_from_bytes
+from pdf2image import convert_from_bytes, convert_from_path
 from io import BytesIO
 
 pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
 
-pdf_dir = "D:\\Users\\Armando\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\" 
+pdf_dir = 'D:\\Users\\Armando\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
 
-pdf_path = pdf_dir + "Trinkaus_1984.pdf"
+pdf_path = pdf_dir + 'Trinkaus_1984.pdf'
 
 with open(pdf_path, 'rb') as file:
+       
     pdf_reader = PyPDF2.PdfFileReader(file)
     num_pages = pdf_reader.numPages
 
@@ -25,7 +26,7 @@ with open(pdf_path, 'rb') as file:
     # Iterate through each page of the PDF
     for page_num in range(num_pages):
         # Convert the page to an image
-        images = convert_from_bytes(file.read(), dpi=300, first_page=page_num+1, last_page=page_num+1)
+        images = convert_from_path(pdf_path, dpi=300, first_page=page_num+1, last_page=page_num+1)
     
         # Perform OCR on each image
         ocr_text = pytesseract.image_to_string(images[0])

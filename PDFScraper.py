@@ -21,6 +21,7 @@ from wordcloud import WordCloud, STOPWORDS
 import PyPDF2
 import pytesseract
 from pdf2image import convert_from_bytes, convert_from_path
+from io import BytesIO
 
 st.title('PDF Citation Scraper')
 
@@ -31,6 +32,8 @@ simult   = st.checkbox('Check box if keywords and authors should be searched in 
 
 # Ask user to upload a file
 uploaded_files = st.file_uploader("Upload single or multiple PDFs...", type="pdf", accept_multiple_files=True)
+
+pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
 # direct = 'C:\\Users\\arman\\OneDrive\\Documents\\AuthorPapers (in progress)\\Forensic Assumptions\\Calibration-PDFs\\'
 
@@ -90,30 +93,31 @@ class pdf_scraper():
 
     def text_extract(self):
         
-        file = self.file
-    
-        with open(file, 'rb') as pdf:
+        file = self.file.read()
+        
+        lines=[]
+        #with open(file.read(), 'rb') as pdf:
+        with BytesIO(file) as pdf:
             pdf_reader = PyPDF2.PdfFileReader(pdf)
             num_pages = pdf_reader.numPages
-        
-            lines = []
+    
             # Iterate through each page of the PDF
             for page_num in range(num_pages):
                 # Convert the page to an image
-                images = convert_from_path(file, dpi=300, first_page=page_num+1, last_page=page_num+1)
-            
+                images = convert_from_bytes(file, dpi=300, first_page=page_num+1, last_page=page_num+1)
+    
                 # Perform OCR on each image
                 ocr_text = pytesseract.image_to_string(images[0])
             
                 # Process the OCR tex t
-                ocr_lines = re.split(r'([A-Z].*?\.)', ocr_text)
+                ocr_lines = re.split(r'\.([A-Z].*?\.)', ocr_text)
         
                 # Filter out lines that represent tables or graphs
                 filtered_lines = [line for line in ocr_lines if not all(char.isnumeric() for char in line)]
             
                 # Add the filtered lines to the main lines list
                 lines += filtered_lines
-        
+                
         seen = set()
         lines = [line for line in lines if not (line in seen or seen.add(line))]
         lines = [re.sub(r'-\n', '', line) for line in lines]
@@ -133,6 +137,7 @@ class pdf_scraper():
                 txt.append(current_sentence)
                 current_sentence = ""
                 
+        st.write(lines)
     
         # find references section and separate from text
         ref_lim = -1
